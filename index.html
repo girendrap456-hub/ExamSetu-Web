@@ -364,7 +364,7 @@ async function showOnlineExamQuestions(id){
  const item=onlineExams.find(x=>x.id===id);if(!item)return;
  onlineSelectedExam=item;onlineExamQuestions=[];onlineQuestionState='loading';go('online-questions');
  try{
-  const {data,error}=await sb.from('questions').select('id,question_text,options,marks,question_order').eq('exam_id',id).order('question_order',{ascending:true}).limit(1000);
+  const {data,error}=await sb.from('questions').select('id,question_text,options,marks,question_order').eq('exam_id',id).order('question_order',{ascending:true}).order('id',{ascending:true}).limit(1000);
   if(error)throw error;
   onlineExamQuestions=data||[];onlineQuestionState='ready';
  }catch(e){onlineQuestionState='error: '+(e.message||String(e));}
@@ -373,17 +373,60 @@ async function showOnlineExamQuestions(id){
 function onlineExamListHtml(){
  const state=onlineLoadState;
  return `<section class="card"><h2>🌐 Supabase Online Exams</h2><p class="muted">Admin द्वारा Published Papers — सभी Logged-in Students के लिए।</p>
- ${state==='loading'?'<p>Online Papers लोड हो रहे हैं…</p>':state.startsWith('error:')?`<p role="alert">${esc(state)}</p>`:!onlineExams.length?'<p>अभी कोई Published Online Paper नहीं मिला।</p>':onlineExams.map(e=>`<article class="card" style="margin:12px 0"><b>${esc(e.title)}</b><p class="muted">${esc(e.category||'General')} · ${Number(e.duration_minutes)||0} मिनट</p><button class="btn" onclick="showOnlineExamQuestions('${e.id}')">प्रश्न देखें →</button></article>`).join('')}
+ ${state==='loading'?'<p>Online Papers लोड हो रहे हैं…</p>':state.startsWith('error:')?`<p role="alert">${esc(state)}</p>`:!onlineExams.length?'<p>अभी कोई Published Online Paper नहीं मिला।</p>':onlineExams.map(e=>`<article class="card" style="margin:12px 0"><b>${esc(e.title)}</b><p class="muted">${esc(e.category||'General')} · ${Number(e.duration_minutes)||0} मिनट</p><button class="btn" onclick="showOnlineExamQuestions('${e.id}')">▶ Start Test →</button></article>`).join('')}
  <button class="btn alt" onclick="loadOnlineExams()">↻ Refresh Online Exams</button></section>`;
+}
+// Supabase online attempt: question list never requests answer keys.
+let onlineAttempt=null,onlineAttemptTimer=null,onlineAttemptResult=null;
+function onlineClockText(n){n=Math.max(0,Math.floor(n));return Math.floor(n/60)+':'+String(n%60).padStart(2,'0')}
+function onlineStartAttempt(){
+ if(onlineQuestionState!=='ready'||!onlineExamQuestions.length){alert('पहले Questions लोड होने दें।');return;}
+ if(onlineAttemptTimer)clearInterval(onlineAttemptTimer);
+ const mins=Math.max(1,Number(onlineSelectedExam.duration_minutes)||10);
+ onlineAttempt={examId:onlineSelectedExam.id,title:onlineSelectedExam.title,ends:Date.now()+mins*60000,answers:{},visited:{0:true},review:{},index:0,submitting:false};
+ onlineAttemptResult=null;go('online-attempt');onlineAttemptTimer=setInterval(onlineTick,1000);
+}
+function onlineTick(){
+ if(!onlineAttempt||page!=='online-attempt'){clearInterval(onlineAttemptTimer);onlineAttemptTimer=null;return;}
+ const remain=Math.max(0,Math.ceil((onlineAttempt.ends-Date.now())/1000));
+ const clock=document.getElementById('online-clock');if(clock)clock.textContent=onlineClockText(remain);
+ if(remain===0){clearInterval(onlineAttemptTimer);onlineAttemptTimer=null;onlineSubmit(true)}
+}
+function onlinePick(i){if(!onlineAttempt||onlineAttempt.submitting)return;const n=onlineAttempt.index;onlineAttempt.answers[n]===i?delete onlineAttempt.answers[n]:onlineAttempt.answers[n]=i;render()}
+function onlineNavigate(i){if(!onlineAttempt||onlineAttempt.submitting)return;onlineAttempt.index=Math.max(0,Math.min(onlineExamQuestions.length-1,i));onlineAttempt.visited[onlineAttempt.index]=true;render()}
+function onlineToggleReview(){if(!onlineAttempt)return;const i=onlineAttempt.index;onlineAttempt.review[i]=!onlineAttempt.review[i];render()}
+async function onlineSubmit(automatic=false){
+ const a=onlineAttempt;if(!a||a.submitting)return;
+ const count=Object.keys(a.answers).length;
+ if(!automatic&&!confirm('Exam Submit करें?\nAttempted: '+count+'/'+onlineExamQuestions.length))return;
+ a.submitting=true;clearInterval(onlineAttemptTimer);onlineAttemptTimer=null;render();
+ try{
+  if(!sb||!currentUser)throw Error('Student Login आवश्यक है।');
+  const {data:result,error}=await sb.rpc('examsetu_grade_online_exam',{p_exam_id:a.examId,p_answers:a.answers});
+  if(error)throw error;
+  if(!result||!Array.isArray(result.questions))throw Error('Server ने Result नहीं लौटाया।');
+  onlineAttemptResult=result;onlineAttempt=null;go('online-result');
+ }catch(e){a.submitting=false;alert('Online Submit Error: '+(e.message||String(e))+'\nSupabase SQL setup जाँचें।');render();}
 }
 function onlineQuestionsHtml(){
  if(!onlineSelectedExam)return '<p>पहले Online Exam चुनें।</p>';
  return `<section class="card"><button class="btn alt" onclick="go('online-exams')">← Online Exams</button><h2>${esc(onlineSelectedExam.title)}</h2>
- <p class="muted">प्रश्नों का सुरक्षित Preview है। Online Attempt, Submit और Result अभी सक्रिय नहीं हैं।</p>
- ${onlineQuestionState==='loading'?'<p>Questions लोड हो रहे हैं…</p>':onlineQuestionState.startsWith('error:')?`<p role="alert">${esc(onlineQuestionState)}</p>`:onlineExamQuestions.map((q,i)=>{
- const options=Array.isArray(q.options)?q.options:typeof q.options==='object'&&q.options?Object.values(q.options):[];
- return `<article class="card" style="margin:12px 0"><b>Q${i+1}. ${esc(q.question_text||'')}</b><ol type="A">${options.map(o=>`<li>${esc(typeof o==='string'?o:JSON.stringify(o))}</li>`).join('')}</ol></article>`;
- }).join('')||'<p>इस Exam में कोई Question नहीं मिला।</p>'}</section>`;
+ <p class="muted">${onlineQuestionState==='ready'?'Test शुरू करने के लिए नीचे Start Test दबाएँ।':'प्रश्न तैयार हो रहे हैं।'}</p>
+ ${onlineQuestionState==='loading'?'<p>Questions लोड हो रहे हैं…</p>':onlineQuestionState.startsWith('error:')?`<p role="alert">${esc(onlineQuestionState)}</p>`:!onlineExamQuestions.length?'<p>इस Exam में कोई Question नहीं मिला।</p>':`<p>${onlineExamQuestions.length} प्रश्न · ${Number(onlineSelectedExam.duration_minutes)||10} मिनट</p><button class="btn" onclick="onlineStartAttempt()">▶ Start Test</button>`}</section>`;
+}
+function onlineAttemptHtml(){
+ const a=onlineAttempt;if(!a)return '<p>कोई Exam चालू नहीं है।</p>';
+ const i=a.index,q=onlineExamQuestions[i],opts=Array.isArray(q.options)?q.options:Object.values(q.options||{});
+ const answered=Object.keys(a.answers).length,remaining=Math.max(0,Math.ceil((a.ends-Date.now())/1000));
+ return `<section class="card"><div class="flex space"><h2>${esc(a.title)}</h2><strong>⏱ <span id="online-clock">${onlineClockText(remaining)}</span></strong></div><p>Question ${i+1}/${onlineExamQuestions.length} · Answered ${answered} · गलत उत्तर पर −${Number(onlineSelectedExam.negative_mark)||0}</p>
+ <div class="card"><h2>Q${i+1}. ${esc(q.question_text||'')}</h2>${opts.map((o,j)=>`<button class="option ${a.answers[i]===j?'selected':''}" ${a.submitting?'disabled':''} onclick="onlinePick(${j})">${String.fromCharCode(65+j)}. ${esc(typeof o==='string'?o:JSON.stringify(o))}</button>`).join('')}</div>
+ <div class="flex"><button class="btn alt" onclick="onlineNavigate(${i-1})" ${i===0||a.submitting?'disabled':''}>← Previous</button><button class="btn alt" onclick="onlineToggleReview()" ${a.submitting?'disabled':''}>${a.review[i]?'✓ Review Marked':'☆ Mark for Review'}</button><button class="btn" onclick="onlineNavigate(${i+1})" ${i===onlineExamQuestions.length-1||a.submitting?'disabled':''}>Next →</button></div>
+ <h3>Question Palette</h3><div class="omr-grid" style="max-width:430px">${onlineExamQuestions.map((_,j)=>`<button class="omr ${a.review[j]?'omr-review':a.answers[j]!==undefined?'omr-done':a.visited[j]?'omr-empty':'omr-unseen'} ${i===j?'omr-active':''}" onclick="onlineNavigate(${j})" ${a.submitting?'disabled':''}>${j+1}</button>`).join('')}</div>
+ <button class="btn" onclick="onlineSubmit(false)" ${a.submitting?'disabled':''}>${a.submitting?'Submitting…':'Submit Exam'}</button></section>`;
+}
+function onlineResultHtml(){
+ const r=onlineAttemptResult;if(!r)return '<p>Result उपलब्ध नहीं है।</p>';
+ return `<section class="card"><h1>Online Exam Result</h1><h2>${esc(r.title||'Exam')}</h2><p><b>Score: ${Number(r.score)}/${Number(r.total_marks)}</b> · Correct: ${Number(r.correct)} · Attempted: ${Number(r.attempted)} / ${Number(r.total_questions)}</p><button class="btn alt" onclick="go('online-exams');loadOnlineExams()">← Online Exams</button></section>${r.questions.map((q,i)=>{const original=onlineExamQuestions[i]||{};const opts=Array.isArray(original.options)?original.options:Object.values(original.options||{});return `<section class="card"><b>Q${i+1}. ${esc(original.question_text||'')}</b>${opts.map((o,j)=>`<div class="option ${j===q.correct?'correct':j===q.selected&&j!==q.correct?'wrong':''}" style="cursor:default">${String.fromCharCode(65+j)}. ${esc(o)} ${j===q.correct?'✓':''}${j===q.selected&&j!==q.correct?'✗':''}</div>`).join('')}<p><b>आपका उत्तर:</b> ${q.selected===null?'नहीं दिया':String.fromCharCode(65+Number(q.selected))} · <b>सही उत्तर:</b> ${String.fromCharCode(65+Number(q.correct))}</p><div class="practice-solution"><b>Solution:</b> ${esc(q.solution||'विस्तृत समाधान उपलब्ध नहीं है।')}</div></section>`}).join('')}`;
 }
 let activeNegativeMark=1, activeExamMinutes=70;let visited={},omrVisible=true;let solutionsOpen=false;let history=[];try{history=JSON.parse(localStorage.getItem('examsetu_demo_history')||'[]')}catch(e){}
 const $=id=>document.getElementById(id), esc=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'), fmt=n=>Math.floor(n/60)+':'+String(n%60).padStart(2,'0');
@@ -499,13 +542,15 @@ function openLibraryExam(title,practice=false){exam=title;const item=importedExa
 function progress(r){let v=Math.max(0,Math.min(100,Math.round(r.score/9*100)));return `<div class="flex tiny" style="margin:10px 0"><span>${esc(r.date)}</span><div class="bar"><i style="width:${v}%"></i></div><b>${r.score}/${r.totalMarks||9}</b></div>`}
 function resultCards(r){return `<h2>Score Progress — ${esc(r.exam)}</h2><div class="card">${history.filter(x=>x.exam===r.exam).slice().reverse().map(progress).join('')}</div>`}
 function navHtml(){if(!admin||['signup','login','forgot','admin-login'].includes(page)){$('nav').innerHTML='';return;}let links=admin?[['admin','📊 Admin'],['add','➕ Add Exam'],['students','👥 Students'],['import','📥 Import'],['analytics','📈 Analytics'],['home','🏠 Student']]:[['home','🏠 Home'],['tests','📝 Exams'],['history','📜 History'],['notes','📚 Notes'],['rank','🏆 Rank']];$('nav').innerHTML=(page!=='home'&&page!=='exam'?'<button class="nav-back" title="Back" aria-label="Back" onclick="back()">←</button>':'')+links.map(([p,t])=>`<button class="${page===p?'active':''}" onclick="${p==='home'&&admin?"admin=false;":''}go('${p}')">${t}</button>`).join('')+(admin?'<button class="admin-logout" onclick="adminLogout()">⏻ Admin Logout</button>':'')}
-function render(){window.examSetuExamActive=(page==='exam'&&mode==='test');document.body.classList.toggle('home-nav-visible',loggedIn&&!admin);document.body.classList.toggle('home-menu-visible',page==='home'&&loggedIn&&!admin);document.body.classList.toggle('admin-mode',admin);document.body.classList.toggle('show-inline-back',loggedIn&&!admin&&!['home','exam','signup','login','forgot'].includes(page));document.body.classList.toggle('auth-screen',['signup','login','forgot','admin-login'].includes(page));document.body.classList.toggle('exam-screen',page==='exam');document.body.classList.toggle('practice-screen',page==='exam'&&mode==='practice');navHtml();const headerAvatar=$('header-student-avatar');if(headerAvatar)headerAvatar.textContent=studentAvatar();let h='',backbtn='' ,languagebtn=`<label class="exam-language-select" title="Question language">🌐 <select aria-label="Question language" onchange="setQuestionLanguage(this.value)"><option value="hi" ${lang==='hi'?'selected':''}>हिन्दी</option><option value="en" ${lang==='en'?'selected':''}>English</option></select></label>`;
+function render(){window.examSetuExamActive=((page==='exam'&&mode==='test')||page==='online-attempt');document.body.classList.toggle('home-nav-visible',loggedIn&&!admin);document.body.classList.toggle('home-menu-visible',page==='home'&&loggedIn&&!admin);document.body.classList.toggle('admin-mode',admin);document.body.classList.toggle('show-inline-back',loggedIn&&!admin&&!['home','exam','signup','login','forgot'].includes(page));document.body.classList.toggle('auth-screen',['signup','login','forgot','admin-login'].includes(page));document.body.classList.toggle('exam-screen',page==='exam');document.body.classList.toggle('practice-screen',page==='exam'&&mode==='practice');navHtml();const headerAvatar=$('header-student-avatar');if(headerAvatar)headerAvatar.textContent=studentAvatar();let h='',backbtn='' ,languagebtn=`<label class="exam-language-select" title="Question language">🌐 <select aria-label="Question language" onchange="setQuestionLanguage(this.value)"><option value="hi" ${lang==='hi'?'selected':''}>हिन्दी</option><option value="en" ${lang==='en'?'selected':''}>English</option></select></label>`;
 if(page==='signup'){h=`<div class="auth-card"><h1>👤 Create Student Account</h1><p class="muted">पहली बार Account बनाएँ, फिर Email और Password से Login करें।</p><label class="field">Student Name<input id="signupName" autocomplete="name" placeholder="पूरा नाम"></label><label class="field">Email<input id="signupEmail" type="email" autocomplete="username" placeholder="example@gmail.com"></label><label class="field">Password<input id="signupPassword" type="password" autocomplete="new-password" placeholder="कम से कम 8 अक्षर"></label><label class="field">Confirm Password<input id="signupConfirm" type="password" autocomplete="new-password"></label>${authError?`<p class="danger">${esc(authError)}</p>`:''}<button class="btn" onclick="registerDemo()">Create Account →</button> <button class="btn alt" onclick="authError='';go('login')">Already registered? Login</button><p class="tiny muted">Supabase Online Account • Email Confirmation आवश्यक है।</p></div>`}
 else if(page==='login'){h=`<div class="auth-card"><h1>🔐 Student Login</h1><p class="muted">Registered Email और Password डालें। एक बार Login होने पर इसी Browser में अगली बार अपने-आप Login रहेगा।</p><label class="field">Email<input id="loginEmail" type="email" autocomplete="username" value="${esc(loginEmail)}" placeholder="Registered Email"></label><label class="field">Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password"></label>${authError?`<p class="danger">${esc(authError)}</p>`:''}<button class="btn" onclick="loginDemo()">Login to ExamSetu →</button> <button class="btn alt" onclick="authError='';go('signup')">Create Account</button><p><button class="back" onclick="go('forgot')">Forgot Password?</button></p></div>`}
 else if(page==='forgot'){h=`<div class="auth-card"><h1>Reset Password</h1><p>Supabase से Password Reset Link भेजें। <button class="btn" onclick="sendPasswordReset()">Send Reset Email</button></p><button class="btn alt" onclick="go('login')">← Login</button></div>`}
 else if(page==='home'){let total=history.length,accuracy=total?Math.round(history.reduce((n,r)=>n+r.correct,0)/(total*3)*100):0;h=`<div class="profiletop"><div><b class="student-name">👤 ${esc(demoAccount?.name||'Student')}</b><div class="tiny muted">Welcome to ExamSetu</div></div></div><h1>नमस्ते, विद्यार्थी 👋</h1>${pausedExamInfo()?`<div class="card paused-exam-card"><h2>⏸ रुकी हुई परीक्षा</h2><p><b>${esc(pausedExamInfo().exam)}</b></p><p>बचा समय: ${fmt(pausedExamInfo().seconds)} • प्रश्न ${pausedExamInfo().qi+1}/${pausedExamInfo().data.length}</p><button class="btn" onclick="resumePausedExam()">▶ Resume Exam — वहीं से शुरू करें</button></div>`:''}<div class="hero"><h2>आज की तैयारी, कल की सफलता!</h2><p>रोज़ एक टेस्ट, लक्ष्य के और करीब।</p><button class="btn" onclick="go('online-exams');loadOnlineExams()">Start Online Exams →</button></div><div class="grid"><div class="stat"><b>${total}</b>Completed Tests</div><div class="stat"><b>${accuracy}%</b>Practice Accuracy</div><div class="stat"><b>🔥</b>Study Streak (Planned)</div></div><h2>Available Exams</h2><button class="btn" onclick="go('online-exams');loadOnlineExams()">🌐 View Online Exams →</button>`}
 else if(page==='online-exams'){h=onlineExamListHtml()}
 else if(page==='online-questions'){h=onlineQuestionsHtml()}
+else if(page==='online-attempt'){h=onlineAttemptHtml()}
+else if(page==='online-result'){h=onlineResultHtml()}
 else if(page==='tests'){h=onlineExamListHtml();}
 
 else if(page==='series-detail'){h=renderSeriesDetail()}
