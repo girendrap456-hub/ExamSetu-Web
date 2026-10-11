@@ -602,7 +602,7 @@ async function importExamNow(){
   newId=created.id;
   const rows=importedPreview.questions.map((q,i)=>({exam_id:newId,question_text:q.text,options:q.options,answer:q.answer,marks:Number(q.marks||marks),question_order:i+1,solution:q.solution||''}));
   for(let i=0;i<rows.length;i+=100){const {error}=await sb.from('questions').insert(rows.slice(i,i+100));if(error)throw error}
-  if(settings.publish){const {error}=await sb.from('exams').update({is_published:true}).eq('id',newId);if(error)throw error}
+  if(document.getElementById('adminExamPublished')?.checked){const {error}=await sb.from('exams').update({is_published:true}).eq('id',newId);if(error)throw error}
   importedPreview=null;importError='';
   alert('Exam Supabase में Online Save हो गया। अब दूसरे Browser में भी दिखाई दे सकता है।');
   await loadOnlineExams();render();
@@ -659,7 +659,49 @@ function libraryManager(){return `<div class="card"><h2>📁 Exam Folder Manager
 function selectAdminPaperType(type){adminSelectedType=type;importError='';render()}
 function adminPaperTypeCards(){const types=[['Full Mock','Add Full Mock','पूरी परीक्षा का पेपर'],['Mock Test','Add Mock Test','अभ्यास मॉक टेस्ट'],['PYQ','Add PYQ + Year','पिछले वर्षों के प्रश्नपत्र'],['Subject Test','Add Subject Test','विषय के अनुसार टेस्ट'],['Chapter Test','Add Chapter Test','अध्याय के अनुसार टेस्ट']];return `<div class="card admin-test-types"><h2>📚 Student के अनुसार Exam Type चुनें</h2><p class="muted">नीचे किसी एक विकल्प पर क्लिक करें, फिर Folder और JSON से पेपर जोड़ें।</p><div class="admin-type-grid">${types.map(([type,label,desc])=>`<button type="button" class="admin-type-choice ${adminSelectedType===type?'selected':''}" onclick="selectAdminPaperType('${type}')"><b>${label}</b><small>${desc}</small>${adminSelectedType===type?'<span class="type-selected">✓ Selected</span>':''}</button>`).join('')}</div>${adminSelectedType==='PYQ'?`<label class="field"><b>PYQ Year (वर्ष)</b><input id="adminPYQYear" type="number" min="1950" max="2100" placeholder="जैसे 2024" value="${esc(adminPYQYear)}" oninput="adminPYQYear=this.value"></label>`:''}<p class="muted">चुना गया प्रकार: <b>${esc(adminSelectedType)}</b></p></div>`}
 function adminPaperTypeOptions(selected){return [['Full Mock','Full Mock'],['Mock Test','Mock Test'],['Subject Test','Subject Test'],['Chapter Test','Chapter Test'],['PYQ','PYQ — Previous Year Questions']].map(([v,label])=>`<option value="${v}" ${selected===v?'selected':''}>${label}</option>`).join('')}
-function importManager(){return `${adminPaperTypeCards()}${libraryManager()}${examEditPanel()}<div class="card"><h2>📥 ${esc(adminSelectedType)} — JSON Upload</h2><p class="muted">ऊपर चुने गए प्रकार का पेपर यहाँ Import करें।</p><label class="field"><b>2. Select JSON File</b><input type="file" accept=".json,application/json" onchange="selectExamFile(this)"></label>${importError?`<p class="danger">⚠ ${esc(importError)}</p>`:''}${importedPreview?`<div class="stat"><b>${esc(importedPreview.title)}</b><p>${importedPreview.questions.length} Questions • ${importedPreview.minutes} Minutes</p><p>📁 ${esc(folderPath(chosenFolder))}</p></div><div class="marks-settings"><label class="field">एक Question के Marks<input id="adminMarks" type="number" min="0.01" step="0.01" value="${importedPreview.marks_per_question||3}"></label><label class="field"><input id="adminNegEnabled" type="checkbox" ${importedPreview.negative_mark>0?'checked':''} onchange="document.getElementById('adminNegative').disabled=!this.checked"> Negative Marking लागू करें</label><label class="field">एक गलत उत्तर पर कितने Marks कटेंगे?<input id="adminNegative" type="number" min="0" step="0.01" value="${importedPreview.negative_mark||0}" ${importedPreview.negative_mark>0?'':'disabled'}></label><label class="field">Cutoff Marks<input id="adminCutoff" type="number" min="0" step="0.01" value="0"></label></div><br><button class="btn" onclick="importExamNow()">✓ Add ${adminSelectedType==='PYQ'?'PYQ':'Exam'} to Folder</button>`:'<p class="muted">Folder चुनें और JSON File Upload करें। फिर Marks, Cutoff और Add Button दिखाई देंगे।</p>'}</div><div class="card"><h2>Imported Exams (${importedExams.length})</h2>${importedExams.map(x=>`<p>📄 <b>${esc(x.title)}</b> • ${x.questions.length} Questions • ${esc(x.type||'Full Mock')} ${x.pyq_year?'('+esc(x.pyq_year)+')':''} • ${x.marks_per_question||3} Marks/Question • Negative ${x.negative_mark||0}<br><small>📁 ${esc(folderPath(x.folderId))} · ${x.published?'🟢 Published':'⚪ Draft'}</small><br><button class="btn alt" onclick="editImportedExam('${esc(x.id)}')">✏️ Edit</button> <button class="btn alt" onclick="deleteImportedExam('${esc(x.id)}')">🗑 Delete</button></p>`).join('')||'<p class="muted">अभी कोई Exam Import नहीं किया गया।</p>'}</div>`}
+// Supabase online exam administration (separate from legacy browser-only items).
+let adminOnlineExams=[],adminOnlineState='not-loaded';
+async function loadAdminOnlineExams(){
+ if(!sb||!currentUser)return;
+ adminOnlineState='loading';
+ try{
+  const {data:profile,error:roleError}=await sb.from('profiles').select('role').eq('id',currentUser.id).single();
+  if(roleError||profile?.role!=='admin')throw Error('Admin role आवश्यक है।');
+  const {data,error}=await sb.from('exams').select('id,title,category,is_published,created_at').order('created_at',{ascending:false}).limit(500);
+  if(error)throw error;
+  adminOnlineExams=data||[];adminOnlineState='ready';
+ }catch(e){adminOnlineState='error: '+(e.message||String(e))}
+ render();
+}
+async function deleteOnlineExam(id){
+ if(!sb||!currentUser)return alert('पहले Admin Login करें।');
+ const x=adminOnlineExams.find(e=>String(e.id)===String(id));if(!x)return;
+ if(!confirm('क्या आप "'+x.title+'" को Supabase Online Database से हमेशा के लिए Delete करना चाहते हैं? यह सभी Students के लिए हट जाएगा।'))return;
+ try{
+  const {data:profile,error:roleError}=await sb.from('profiles').select('role').eq('id',currentUser.id).single();
+  if(roleError||profile?.role!=='admin')throw Error('केवल Admin Delete कर सकता है।');
+  const {data,error}=await sb.from('exams').delete().eq('id',id).select('id');
+  if(error)throw error;
+  if(!data?.length)throw Error('Exam Delete नहीं हुआ। Supabase RLS/Delete Policy चेक करें।');
+  alert('Exam Supabase से Delete हो गया।');
+  await loadAdminOnlineExams();await loadOnlineExams();
+ }catch(e){alert('Online Delete FAILED: '+(e.message||String(e))+'\nअगर questions/results के Foreign Key की वजह से Error है, तो Database में सुरक्षित CASCADE या Server-side Delete Function की जरूरत होगी।')}
+}
+async function setOnlineExamPublished(id,published){
+ if(!sb||!currentUser)return;
+ try{
+  const {data:profile,error:roleError}=await sb.from('profiles').select('role').eq('id',currentUser.id).single();
+  if(roleError||profile?.role!=='admin')throw Error('Admin role आवश्यक है।');
+  const {data,error}=await sb.from('exams').update({is_published:published}).eq('id',id).select('id');
+  if(error)throw error;
+  if(!data?.length)throw Error('Update नहीं हुआ। RLS Update Policy चेक करें।');
+  await loadAdminOnlineExams();await loadOnlineExams();
+ }catch(e){alert('Publish Update FAILED: '+(e.message||String(e)))}
+}
+function adminOnlineExamManager(){
+ return `<div class="card"><h2>🌐 Supabase Online Exams (${adminOnlineExams.length})</h2><p class="muted">यह सूची Online Database से आती है। Delete स्थायी है और सभी Students पर लागू होगा।</p><button class="btn alt" onclick="loadAdminOnlineExams()">↻ Load / Refresh Online Exams</button>${adminOnlineState==='loading'?'<p>लोड हो रहा है…</p>':adminOnlineState.startsWith('error:')?`<p class="danger">${esc(adminOnlineState)}</p>`:adminOnlineState==='not-loaded'?'<p class="muted">Online Exams देखने के लिए Load दबाएँ।</p>':adminOnlineExams.length?adminOnlineExams.map(x=>`<div style="padding:12px 0;border-bottom:1px solid #dce6f1"><b>${esc(x.title)}</b> <span class="chip">${x.is_published?'🟢 Published':'⚪ Draft'}</span><p class="tiny muted">${esc(x.category||'')}</p><div class="flex"><button class="btn alt" onclick="setOnlineExamPublished('${esc(String(x.id))}',${!x.is_published})">${x.is_published?'Unpublish':'Publish'}</button><button class="btn alt" style="color:#b52929" onclick="deleteOnlineExam('${esc(String(x.id))}')">🗑 Delete Online Exam</button></div></div>`).join(''):'<p>कोई Online Exam नहीं मिला।</p>'}</div>`;
+}
+function importManager(){return `${adminPaperTypeCards()}${libraryManager()}${examEditPanel()}${adminOnlineExamManager()}<div class="card"><h2>📥 ${esc(adminSelectedType)} — JSON Upload</h2><p class="muted">ऊपर चुने गए प्रकार का पेपर यहाँ Import करें।</p><label class="field"><b>2. Select JSON File</b><input type="file" accept=".json,application/json" onchange="selectExamFile(this)"></label>${importError?`<p class="danger">⚠ ${esc(importError)}</p>`:''}${importedPreview?`<div class="stat"><b>${esc(importedPreview.title)}</b><p>${importedPreview.questions.length} Questions • ${importedPreview.minutes} Minutes</p><p>📁 ${esc(folderPath(chosenFolder))}</p></div><div class="marks-settings"><label class="field">एक Question के Marks<input id="adminMarks" type="number" min="0.01" step="0.01" value="${importedPreview.marks_per_question||3}"></label><label class="field"><input id="adminNegEnabled" type="checkbox" ${importedPreview.negative_mark>0?'checked':''} onchange="document.getElementById('adminNegative').disabled=!this.checked"> Negative Marking लागू करें</label><label class="field">एक गलत उत्तर पर कितने Marks कटेंगे?<input id="adminNegative" type="number" min="0" step="0.01" value="${importedPreview.negative_mark||0}" ${importedPreview.negative_mark>0?'':'disabled'}></label><label class="field">Cutoff Marks<input id="adminCutoff" type="number" min="0" step="0.01" value="0"></label></div><label class="field"><input id="adminExamPublished" type="checkbox" checked> <b>Published (Students को दिखाएँ)</b></label><p class="muted tiny">Unchecked रखने पर Exam Draft रहेगा और Students को नहीं दिखेगा।</p><br><button class="btn" onclick="importExamNow()">✓ Add ${adminSelectedType==='PYQ'?'PYQ':'Exam'} to Folder</button>`:'<p class="muted">Folder चुनें और JSON File Upload करें। फिर Marks, Cutoff और Add Button दिखाई देंगे।</p>'}</div><div class="card"><h2>Imported Exams (${importedExams.length})</h2>${importedExams.map(x=>`<p>📄 <b>${esc(x.title)}</b> • ${x.questions.length} Questions • ${esc(x.type||'Full Mock')} ${x.pyq_year?'('+esc(x.pyq_year)+')':''} • ${x.marks_per_question||3} Marks/Question • Negative ${x.negative_mark||0}<br><small>📁 ${esc(folderPath(x.folderId))} · ${x.published?'🟢 Published':'⚪ Draft'}</small><br><button class="btn alt" onclick="editImportedExam('${esc(x.id)}')">✏️ Edit</button> <button class="btn alt" onclick="deleteImportedExam('${esc(x.id)}')">🗑 Delete</button></p>`).join('')||'<p class="muted">अभी कोई Exam Import नहीं किया गया।</p>'}</div>`}
 
 function filterSeries(term){window.examSearchTerm=String(term||'').toLowerCase();document.querySelectorAll('.series-card').forEach(el=>el.style.display=el.textContent.toLowerCase().includes(window.examSearchTerm)?'':'none')}
 function libraryStudentList(){const items=importedExams.filter(x=>x.published);return `<h2>Imported Exams</h2>${items.length?items.map(x=>examCard(x.title,true)).join(''):'<p class="muted">अभी कोई Published Imported Exam नहीं है।</p>'}`}
