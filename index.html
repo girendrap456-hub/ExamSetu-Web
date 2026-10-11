@@ -569,7 +569,7 @@ function applyPageLanguage(){
  }
 }
 
-// Folder-based JSON exam importer (local demo storage only)
+// Folder-based JSON exam importer (Supabase online save; local editor remains legacy)
 const STORE_FOLDERS='examsetu_demo_folders_v2', STORE_EXAMS='examsetu_demo_imported_v2';
 let folders=[], importedExams=[], chosenFolder='', importedPreview=null, importError='', adminSelectedType='Full Mock', adminPYQYear='';
 try{folders=JSON.parse(localStorage.getItem(STORE_FOLDERS)||'null')||[]}catch(e){}
@@ -582,7 +582,35 @@ function createFolder(){const name=prompt('नए Folder / Subfolder का न�
 function folderTree(parent=null,depth=0){return folders.filter(f=>f.parent===parent).map(f=>`<div style="margin-left:${depth*15}px;padding:7px 0"><button class="btn alt" style="padding:6px 10px" onclick="chosenFolder='${esc(f.id)}';render()">📁 ${esc(f.name)} ${chosenFolder===f.id?'✓':''}</button> <span class="tiny muted">${importedExams.filter(x=>x.folderId===f.id).length} Exams</span></div>`+folderTree(f.id,depth+1)).join('')}
 function validateExamJSON(raw){const obj=Array.isArray(raw)?{title:exam,questions:raw}:raw;if(!obj||typeof obj!=='object'||!Array.isArray(obj.questions)||!obj.questions.length)throw Error('JSON में questions की सूची आवश्यक है।');const title=String(obj.title||exam||'').trim();if(!title)throw Error('Exam Title आवश्यक है।');const minutes=Number(obj.minutes??obj.duration_minutes??70);if(!Number.isFinite(minutes)||minutes<1)throw Error('minutes कम से कम 1 होना चाहिए।');const defaultMarks=Number(obj.marks_per_question??obj.marks??3);if(!Number.isFinite(defaultMarks)||defaultMarks<=0)throw Error('प्रति प्रश्न अंक 0 से अधिक होने चाहिए।');const neg=Number(obj.negative_mark??0);if(!Number.isFinite(neg)||neg<0)throw Error('Negative Marking 0 या उससे अधिक होनी चाहिए।');const questions=obj.questions.map((q,i)=>{const text=String(q.text??q.question_text??q.question??'').trim();const options=q.options;const answer=Number(q.correct??q.answer??q.correct_index);if(!text)throw Error(`प्रश्न ${i+1}: Text आवश्यक है।`);if(!Array.isArray(options)||options.length!==4||options.some(x=>!String(x).trim()))throw Error(`प्रश्न ${i+1}: चार विकल्प आवश्यक हैं।`);if(!Number.isInteger(answer)||answer<0||answer>3)throw Error(`प्रश्न ${i+1}: correct/answer 0 से 3 होना चाहिए।`);const marks=Number(q.marks??defaultMarks);if(!Number.isFinite(marks)||marks<=0)throw Error(`प्रश्न ${i+1}: Marks सही डालें।`);return {text,text_en:String(q.text_en??q.en??''),options,options_en:Array.isArray(q.options_en)&&q.options_en.length===4?q.options_en:null,answer,marks,solution:String(q.solution??q.explanation??''),solution_en:String(q.solution_en??''),subject:String(q.subject??'General')}});return {title,minutes,questions,type:String(obj.type||'Full Mock'),marks_per_question:defaultMarks,negative_mark:neg,folderId:chosenFolder};}
 async function selectExamFile(input){let file=input.files?.[0];if(!file)return;importError='';importedPreview=null;try{if(file.size>5*1024*1024)throw Error('Demo में 5 MB तक की JSON फाइल चुनें।');let raw=JSON.parse(await file.text());importedPreview=validateExamJSON(raw);if(!chosenFolder)throw Error('पहले Folder चुनें।');exam=importedPreview.title;}catch(e){importError=e.message}render()}
-function importExamNow(){if(!importedPreview){alert('पहले सही JSON फाइल चुनें।');return}if(!chosenFolder){alert('Folder चुनें।');return}const key=importedPreview.title.toLowerCase();if(importedExams.some(x=>x.folderId===chosenFolder&&x.title.toLowerCase()===key)){alert('इस Folder में इस नाम का Exam पहले से है।');return}const marks=Number(document.getElementById('adminMarks')?.value??importedPreview.marks_per_question??3);const negativeEnabled=!!document.getElementById('adminNegEnabled')?.checked;const neg=negativeEnabled?Number(document.getElementById('adminNegative')?.value??0):0;const cutoff=Number(document.getElementById('adminCutoff')?.value??0);const chosenType=adminSelectedType||importedPreview.type||'Full Mock';const pyqYear=chosenType==='PYQ'?String(adminPYQYear||'').trim():'';if(!Number.isFinite(marks)||marks<=0||!Number.isFinite(neg)||neg<0||!Number.isFinite(cutoff)||cutoff<0||cutoff>marks*importedPreview.questions.length){alert('Marks, Negative Marking या Cutoff सही करें।');return}const prepared={...importedPreview,pyq_year:pyqYear,type:chosenType,marks_per_question:marks,negative_mark:neg,questions:importedPreview.questions.map(q=>({...q,marks})),folderId:chosenFolder,id:'exam_'+Date.now(),published:settings.publish};importedExams.push(prepared);examCutoffs[prepared.title]=cutoff;localStorage.setItem('examsetu_demo_cutoffs',JSON.stringify(examCutoffs));saveLibrary();importedPreview=null;importError='';alert('Exam '+folderPath(chosenFolder)+' में जोड़ दिया गया (इस Browser का Demo Storage)।');render()}
+async function importExamNow(){
+ if(!importedPreview){alert('पहले सही JSON फाइल चुनें।');return}
+ if(!chosenFolder){alert('Folder चुनें।');return}
+ if(!sb||!currentUser){alert('Supabase Login आवश्यक है।');return}
+ const marks=Number(document.getElementById('adminMarks')?.value??importedPreview.marks_per_question??3);
+ const negativeEnabled=!!document.getElementById('adminNegEnabled')?.checked;
+ const neg=negativeEnabled?Number(document.getElementById('adminNegative')?.value??0):0;
+ const cutoff=Number(document.getElementById('adminCutoff')?.value??0);
+ if(!Number.isFinite(marks)||marks<=0||!Number.isFinite(neg)||neg<0||!Number.isFinite(cutoff)||cutoff<0||cutoff>marks*importedPreview.questions.length){alert('Marks, Negative Marking या Cutoff सही करें।');return}
+ const btn=document.activeElement;if(btn?.tagName==='BUTTON')btn.disabled=true;
+ let newId=null;
+ try{
+  const {data:profile,error:roleError}=await sb.from('profiles').select('role').eq('id',currentUser.id).single();
+  if(roleError||profile?.role!=='admin')throw Error('केवल Supabase Admin Exam जोड़ सकता है।');
+  const category=folderPath(chosenFolder)||'General';
+  const {data:created,error:createError}=await sb.from('exams').insert({title:importedPreview.title,category,description:importedPreview.type||'Full Mock',duration_minutes:importedPreview.minutes,negative_mark:neg,is_published:false}).select('id').single();
+  if(createError)throw createError;
+  newId=created.id;
+  const rows=importedPreview.questions.map((q,i)=>({exam_id:newId,question_text:q.text,options:q.options,answer:q.answer,marks:Number(q.marks||marks),question_order:i+1,solution:q.solution||''}));
+  for(let i=0;i<rows.length;i+=100){const {error}=await sb.from('questions').insert(rows.slice(i,i+100));if(error)throw error}
+  if(settings.publish){const {error}=await sb.from('exams').update({is_published:true}).eq('id',newId);if(error)throw error}
+  importedPreview=null;importError='';
+  alert('Exam Supabase में Online Save हो गया। अब दूसरे Browser में भी दिखाई दे सकता है।');
+  await loadOnlineExams();render();
+ }catch(e){
+  if(newId){const {error:deleteError}=await sb.from('exams').delete().eq('id',newId);if(deleteError)alert('ध्यान दें: अधूरा Unpublished Exam Supabase में रह सकता है। Admin को इसे हटाना होगा।')}
+  alert('Online Save FAILED: '+(e.message||String(e))+'\nBrowser Demo Storage में Exam Save नहीं किया गया।');
+ }finally{if(btn?.tagName==='BUTTON')btn.disabled=false}
+}
 let editingExamId=null;
 function editImportedExam(id){const x=importedExams.find(y=>y.id===id);if(!x)return;editingExamId=id;chosenFolder=x.folderId;go('import')}
 function cancelExamEdit(){editingExamId=null;render()}
