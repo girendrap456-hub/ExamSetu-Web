@@ -523,8 +523,8 @@ let data=[
 let page='signup',stack=[],admin=false,taps=0,lastTap=0,lang='hi',exam='Super TET Full Mock',mode='test',answers={},review={},qi=0,seconds=70*60,elapsed=[0,0,0],startedAt=0,lastTick=0,timer=null,filter='all',settings={timer:true,filter:true,save:true,publish:false,sections:[{name:"हिन्दी",minutes:20},{name:"गणित",minutes:30},{name:"GK",minutes:20}]};
 
 // Online Supabase Auth. Exams/results are still local demo data in this phase.
-const SUPABASE_URL='https://ntdxnrckeyiokfvrhwox.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY='sb_publishable_LsJYKxEP7RqexxQVyVEi8w_8Gj4NRR7';
+const SUPABASE_URL='https://ellxfxpkhdnlgovpnjku.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_cZxEE4SOImEex2QrE_VvkQ_Z3_vZFE_';
 const sb=window.supabase?.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 let demoAccount=null,loggedIn=false,authError='',loginEmail='',currentUser=null;
 async function initOnlineAuth(){
@@ -565,9 +565,14 @@ async function logoutDemo(){if(page==='exam'&&mode==='test'){alert('पहले
  try{if(sb)await sb.auth.signOut()}catch(e){alert('Logout failed: '+e.message);return}
  loggedIn=false;currentUser=null;admin=false;authError='';go('login')}
 async function openAdminOnline(){
- if(!sb||!currentUser){authError='पहले Login करें';go('login');return}
- const {data,error}=await sb.from('profiles').select('role').eq('id',currentUser.id).single();
- if(error||data?.role!=='admin'){alert('Admin access नहीं है।');return}
+ if(!sb){alert('Supabase connection उपलब्ध नहीं है।');return}
+ const {data:sessionData,error:sessionError}=await sb.auth.getUser();
+ const user=sessionData?.user;
+ if(sessionError||!user){authError='पहले Login करें';go('login');return}
+ currentUser=user;
+ const {data:membership,error}=await sb.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle();
+ if(error){alert('Admin Permission जाँच में Error: '+error.message);return}
+ if(!membership){alert('इस Login ID को admin_users में Admin Permission नहीं मिली।');return}
  admin=true;go('admin');
 }
 async function sendPasswordReset(){const email=prompt('Registered Email लिखें:');if(!email)return;
