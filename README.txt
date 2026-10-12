@@ -1,0 +1,1 @@
+ExamSetu PWA: Upload index.html, manifest.webmanifest, service-worker.js, icon-192.png, icon-512.png to the root of a HTTPS host (GitHub Pages or Netlify). On Android Chrome open the hosted URL > menu > Install app. Login and online tests require internet. Original HTML content is retained with only PWA registration/meta additions.
