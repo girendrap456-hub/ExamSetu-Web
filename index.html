@@ -579,8 +579,19 @@ let esOnlineOmrSavedScroll=0,esDemoOmrSavedScroll=0;
 let onlineAttempt=null,onlineAttemptTimer=null,onlineAttemptResult=null,onlineOMR=true,onlinePaused=false,onlineBusy=false,onlineRanks={};
 const onlineClockText=n=>{n=Math.max(0,Math.ceil(Number(n)||0));return Math.floor(n/60)+':'+String(n%60).padStart(2,'0')};
 async function onlineRpc(name,args){const {data,error}=await sb.rpc(name,args);if(error)throw Error(error.message);return data}
-async function loadOnlineExams(){if(!sb||!currentUser)return;onlineLoadState='loading';try{const {data,error}=await sb.from('exams').select('id,title,category,description,duration_minutes,negative_mark,cutoff_marks,created_at').eq('is_published',true).order('created_at',{ascending:false}).limit(200);if(error)throw error;onlineExams=data||[];onlineLoadState='ready';const ranks=await onlineRpc('examsetu_my_status',{});onlineRanks={};for(const r of ranks||[])onlineRanks[r.exam_id]=r;try{const totals=await onlineRpc('examsetu_exam_participants',{});for(const row of totals||[]){onlineRanks[row.exam_id]={...(onlineRanks[row.exam_id]||{}),participants:row.participants}}}catch(_e){}}catch(e){onlineLoadState='error: '+e.message;}if(['home','tests','online-exams'].includes(page))render()}
-async function showOnlineExamQuestions(id){if(!sb||!currentUser)return;const item=onlineExams.find(x=>x.id===id);if(!item)return;onlineSelectedExam=item;onlineExamQuestions=[];onlineQuestionState='loading';go('online-questions');try{const {data,error}=await sb.from('questions').select('id,question_text,options,marks,question_order').eq('exam_id',id).order('question_order',{ascending:true}).order('id',{ascending:true}).limit(1000);if(error)throw error;onlineExamQuestions=data||[];onlineQuestionState='ready';const status=await onlineRpc('examsetu_get_attempt',{p_exam_id:id});if(status?.status==='submitted'){onlineAttemptResult=status.result;onlineAttempt=null;go('online-result');return}if(status?.status==='active'||status?.status==='paused'){onlineRestore(status);if(status.status==='paused'){if(!confirm('यह Exam Pause है। क्या आप अब Resume करके परीक्षा जारी करना चाहते हैं?')){go('tests');return}await onlinePauseResume();return}go('online-attempt');return}}catch(e){onlineQuestionState='error: '+e.message}render()}
+async function loadOnlineExams(){
+ if(!sb||!currentUser)return;onlineLoadState='loading';
+ try{
+  const {data,error}=await sb.from('exams').select('id,title,category,description,duration,marks,negative,published,is_paid,price,created_at').eq('published',true).order('created_at',{ascending:false}).limit(200);
+  if(error)throw error;
+  onlineExams=(data||[]).map(e=>({...e,duration_minutes:e.duration,negative_mark:e.negative}));
+  onlineLoadState='ready';onlineRanks={};
+  try{const ranks=await onlineRpc('examsetu_my_status',{});for(const r of ranks||[])onlineRanks[r.exam_id]=r;}catch(e){console.warn('Rank unavailable:',e.message)}
+  try{const totals=await onlineRpc('examsetu_exam_participants',{});for(const r of totals||[])onlineRanks[r.exam_id]={...(onlineRanks[r.exam_id]||{}),participants:r.participants};}catch(e){}
+ }catch(e){onlineLoadState='error: '+e.message}
+ if(['home','tests','online-exams'].includes(page))render();
+}
+async function showOnlineExamQuestions(id){if(!sb||!currentUser)return;const item=onlineExams.find(x=>x.id===id);if(!item)return;if(item.is_paid){alert('🔒 यह Paid Exam है (₹'+Number(item.price||0)+'). अभी Payment Verification उपलब्ध नहीं है, इसलिए परीक्षा शुरू नहीं की जा सकती।');return;}onlineSelectedExam=item;onlineExamQuestions=[];onlineQuestionState='loading';go('online-questions');try{const {data,error}=await sb.from('questions').select('id,question_text,options,marks,question_order').eq('exam_id',id).order('question_order',{ascending:true}).order('id',{ascending:true}).limit(1000);if(error)throw error;onlineExamQuestions=data||[];onlineQuestionState='ready';const status=await onlineRpc('examsetu_get_attempt',{p_exam_id:id});if(status?.status==='submitted'){onlineAttemptResult=status.result;onlineAttempt=null;go('online-result');return}if(status?.status==='active'||status?.status==='paused'){onlineRestore(status);if(status.status==='paused'){if(!confirm('यह Exam Pause है। क्या आप अब Resume करके परीक्षा जारी करना चाहते हैं?')){go('tests');return}await onlinePauseResume();return}go('online-attempt');return}}catch(e){onlineQuestionState='error: '+e.message}render()}
 let onlineSeriesSelected=null;
 function esOnlineSeriesGroups(){
  const groups=new Map();
@@ -613,7 +624,7 @@ function onlineExamListHtml(){
    const questionCount=Number(e.question_count||e.questions_count||0);
    const totalMarks=Number(e.total_marks||0);
    const minutes=Number(e.duration_minutes)||10;
-   return `<article class="es-folder-paper ${tone}" data-title="${esc(String(e.title).toLowerCase())}"><div class="es-paper-content"><div class="es-paper-title">${esc(e.title)}</div><div class="es-paper-info">${questionCount?`◉ ${questionCount} Questions · `:''}${totalMarks?`▤ ${totalMarks} Marks · `:''}◷ ${minutes} Minutes · 👥 ${st.participants??'—'} Students</div><div class="es-paper-status">${done?'✓ Attempted':paused?'⏸ Paused':'○ Not Attempted'}</div></div>${done?`<div class="es-paper-actions"><button class="es-paper-action" onclick="esOpenSubmittedSolution('${e.id}')">Solution</button><button class="es-paper-action" onclick="esOpenSubmittedAnalysis('${e.id}')">Analysis</button></div>`:`<button class="es-paper-action" onclick="showOnlineExamQuestions('${e.id}')">${paused?'Resume Test':'Start Test'}</button>`}<div class="es-paper-footer">🌐 English, हिन्दी <span> ${done?'✓ Completed':paused?'⏸ Resume available':'Free Test'}</span></div></article>`;
+   return `<article class="es-folder-paper ${tone}" data-title="${esc(String(e.title).toLowerCase())}"><div class="es-paper-content"><div class="es-paper-title">${esc(e.title)} <span class="chip">${e.is_paid?'🔒 Paid ₹'+Number(e.price||0):'🟢 Free'}</span></div><div class="es-paper-info">${questionCount?`◉ ${questionCount} Questions · `:''}${totalMarks?`▤ ${totalMarks} Marks · `:''}◷ ${minutes} Minutes · 👥 ${st.participants??'—'} Students</div><div class="es-paper-status">${done?'✓ Attempted':paused?'⏸ Paused':'○ Not Attempted'}</div></div>${done?`<div class="es-paper-actions"><button class="es-paper-action" onclick="esOpenSubmittedSolution('${e.id}')">Solution</button><button class="es-paper-action" onclick="esOpenSubmittedAnalysis('${e.id}')">Analysis</button></div>`:`<button class="es-paper-action" onclick="showOnlineExamQuestions('${e.id}')">${e.is_paid?'🔒 Paid Exam':(paused?'Resume Test':'Start Test')}</button>`}<div class="es-paper-footer">🌐 English, हिन्दी <span> ${done?'✓ Completed':paused?'⏸ Resume available':(e.is_paid?'🔒 Paid ₹'+Number(e.price||0):'Free Test')}</span></div></article>`;
   }).join('')}</div></div>`;
  }
  return `<div class="series-page"><div class="series-heading"><h1>All Test Series</h1></div><div class="series-grid" id="online-series-grid">${groups.map((g,i)=>{
@@ -789,8 +800,8 @@ function renderSeriesDetail(){
   <div class="detail-footer">🌐 English, Hindi <span>ExamSetu</span></div></div>`
  }).join(''):'<div class="card">इस Filter में कोई Test नहीं है।</div>'}</div></div>`;
 }
-function examCard(title,imported=false){const item=importedExams.find(x=>x.title===title&&x.published),r=history.find(x=>x.exam===title),total=item?item.questions.reduce((n,q)=>n+(Number(q.marks)||3),0):9,cutoff=cutoffFor(title),tone=r?(r.score>=cutoff?'pass':'fail'):'';const count=item?item.questions.length:3;return `<article class="series-card ${tone}"><div class="series-top"><span class="series-emblem" aria-hidden="true">🏆</span><span class="series-tag">⚡ ${count} Questions</span></div><div class="series-body"><h3>${esc(title)}</h3><div class="series-meta">${imported?'Admin Published Exam':''} ${count} Questions</div><div class="series-result">${r?(r.score>=cutoff?'✓ Qualified':'✗ Below Cutoff')+' · '+r.score+'/'+total:'Not Attempted'} · Cutoff ${cutoff}</div><div class="series-progress-label"><span>${r?'1':'0'}/1 Completed</span><span>${r?'100':'0'}%</span></div><div class="series-progress"><i style="width:${r?'100':'0'}%"></i></div><button class="series-action" onclick="openLibraryExam(${JSON.stringify(title).replaceAll('"','&quot;')},${!!r})">${r?'🔁 Practice':'▶ Start Exam'}</button></div></article>`}
-function openLibraryExam(title,practice=false){exam=title;const item=importedExams.find(x=>x.title===title&&x.published);if(item){data=item.questions.map(q=>({subject:q.subject||'General',q:{hi:q.text,en:q.text_en||q.en||q.text},opts:{hi:q.options,en:Array.isArray(q.options_en)?q.options_en:q.options},a:q.answer??q.correct,sol:{hi:q.solution||'Solution not provided',en:q.solution_en||q.solution||'Solution not provided'},marks:Number(q.marks??item.marks_per_question??3)}));activeExamMinutes=Number(item.minutes)||70;activeNegativeMark=Number(item.negative_mark)||0}else{data=demoData.map(q=>({...q,marks:3}));activeExamMinutes=70;activeNegativeMark=1}start(practice)}
+function examCard(title,imported=false){const item=importedExams.find(x=>x.title===title&&x.published),r=history.find(x=>x.exam===title),total=item?item.questions.reduce((n,q)=>n+(Number(q.marks)||3),0):9,cutoff=cutoffFor(title),tone=r?(r.score>=cutoff?'pass':'fail'):'';const count=item?item.questions.length:3;return `<article class="series-card ${tone}"><div class="series-top"><span class="series-emblem" aria-hidden="true">🏆</span><span class="series-tag">⚡ ${count} Questions</span></div><div class="series-body"><h3>${esc(title)} ${item?(item.is_paid?`🔒 Paid ₹${Number(item.price||0)}`:`🟢 Free`):""}</h3><div class="series-meta">${imported?'Admin Published Exam':''} ${count} Questions</div><div class="series-result">${r?(r.score>=cutoff?'✓ Qualified':'✗ Below Cutoff')+' · '+r.score+'/'+total:'Not Attempted'} · Cutoff ${cutoff}</div><div class="series-progress-label"><span>${r?'1':'0'}/1 Completed</span><span>${r?'100':'0'}%</span></div><div class="series-progress"><i style="width:${r?'100':'0'}%"></i></div><button class="series-action" onclick="openLibraryExam(${JSON.stringify(title).replaceAll('"','&quot;')},${!!r})">${r?'🔁 Practice':'▶ Start Exam'}</button></div></article>`}
+function openLibraryExam(title,practice=false){exam=title;const item=importedExams.find(x=>x.title===title&&x.published);if(item?.is_paid){alert('🔒 Paid Exam ₹'+Number(item.price||0)+' — Payment Verification अभी उपलब्ध नहीं है।');return;}if(item){data=item.questions.map(q=>({subject:q.subject||'General',q:{hi:q.text,en:q.text_en||q.en||q.text},opts:{hi:q.options,en:Array.isArray(q.options_en)?q.options_en:q.options},a:q.answer??q.correct,sol:{hi:q.solution||'Solution not provided',en:q.solution_en||q.solution||'Solution not provided'},marks:Number(q.marks??item.marks_per_question??3)}));activeExamMinutes=Number(item.minutes)||70;activeNegativeMark=Number(item.negative_mark)||0}else{data=demoData.map(q=>({...q,marks:3}));activeExamMinutes=70;activeNegativeMark=1}start(practice)}
 
 function progress(r){let v=Math.max(0,Math.min(100,Math.round(r.score/9*100)));return `<div class="flex tiny" style="margin:10px 0"><span>${esc(r.date)}</span><div class="bar"><i style="width:${v}%"></i></div><b>${r.score}/${r.totalMarks||9}</b></div>`}
 function resultCards(r){return `<h2>Score Progress — ${esc(r.exam)}</h2><div class="card">${history.filter(x=>x.exam===r.exam).slice().reverse().map(progress).join('')}</div>`}
@@ -1011,10 +1022,13 @@ function saveExamEdit(){
  const folderId=document.getElementById('editExamFolder')?.value;
  const type=document.getElementById('editExamType')?.value||'Full Mock';const pyq_year=type==='PYQ'?String(document.getElementById('editPYQYear')?.value||'').trim():'';
  const published=!!document.getElementById('editExamPublished')?.checked;
+ const is_paid=document.getElementById('editExamPaid')?.value==='paid';
+ const price=is_paid?Number(document.getElementById('editExamPrice')?.value):0;
+ if(is_paid&&(!Number.isFinite(price)||price<=0))return alert('Paid Exam की कीमत 0 से अधिक रखें।');
  if(!title||!folderId||!Number.isFinite(minutes)||minutes<1||!Number.isFinite(marks)||marks<=0||!Number.isFinite(negative)||negative<0||!Number.isFinite(cutoff)||cutoff<0||cutoff>marks*x.questions.length){alert('Exam की Settings सही भरें।');return}
  if(importedExams.some(y=>y.id!==x.id&&y.folderId===folderId&&y.title.toLowerCase()===title.toLowerCase())){alert('इस Folder में इसी नाम का Exam पहले से है।');return}
  const oldTitle=x.title;
- Object.assign(x,{title,minutes,marks_per_question:marks,negative_mark:negative,folderId,type,pyq_year,published,questions:x.questions.map(q=>({...q,marks}))});
+ Object.assign(x,{title,minutes,marks_per_question:marks,negative_mark:negative,folderId,type,pyq_year,published,is_paid,price,questions:x.questions.map(q=>({...q,marks}))});
  if(oldTitle!==title){delete examCutoffs[oldTitle]}
  examCutoffs[title]=cutoff;
  localStorage.setItem('examsetu_demo_cutoffs',JSON.stringify(examCutoffs));saveLibrary();editingExamId=null;alert('Exam Update हो गया।');render();
@@ -1040,6 +1054,8 @@ function examEditPanel(){const x=importedExams.find(y=>y.id===editingExamId);if(
  <label class="field"><input id="editExamNegativeEnabled" type="checkbox" ${x.negative_mark>0?'checked':''} onchange="document.getElementById('editExamNegative').disabled=!this.checked"> Negative Marking</label>
  <label class="field">Wrong Answer Deduction<input id="editExamNegative" type="number" min="0" step="0.01" value="${x.negative_mark||0}" ${x.negative_mark>0?'':'disabled'}></label>
  <label class="field">Cutoff Marks<input id="editExamCutoff" type="number" min="0" step="0.01" value="${cutoff}"></label>
+ <label class="field">Exam Access<select id="editExamPaid" onchange="document.getElementById('editExamPrice').disabled=this.value!=='paid'"><option value="free" ${!x.is_paid?'selected':''}>🟢 Free Exam</option><option value="paid" ${x.is_paid?'selected':''}>🔒 Paid Exam</option></select></label>
+ <label class="field">Price (₹)<input id="editExamPrice" type="number" min="1" step="0.01" value="${Number(x.price||0)}" ${x.is_paid?'':'disabled'}></label>
  <label class="field"><input id="editExamPublished" type="checkbox" ${x.published?'checked':''}> Published (Students को दिखाएँ)</label>
  <p class="muted">${x.questions.length} Questions — नीचे किसी भी प्रश्न, चार विकल्प, सही उत्तर और समाधान को Edit करें।</p>
  ${examQuestionEditor(x)}
@@ -1047,7 +1063,66 @@ function examEditPanel(){const x=importedExams.find(y=>y.id===editingExamId);if(
  <div class="flex"><button class="btn" onclick="saveExamEdit()">💾 Save Changes</button><button class="btn alt" onclick="cancelExamEdit()">Cancel</button><button class="btn alt" onclick="deleteImportedExam('${esc(x.id)}')">🗑 Delete Exam</button></div></div>`;
 }
 async function replaceExamQuestions(input){const x=importedExams.find(y=>y.id===editingExamId);const f=input.files?.[0];if(!x||!f)return;try{if(f.size>5*1024*1024)throw Error('5MB से छोटी JSON चुनें');const raw=JSON.parse(await f.text());const validated=validateExamJSON({...raw,title:x.title});if(!confirm(validated.questions.length+' नए प्रश्न पुराने प्रश्नों की जगह रख दें?'))return;x.questions=validated.questions.map(q=>({...q,marks:x.marks_per_question||3}));saveLibrary();alert('Questions Replace हो गए। Save Changes से बाकी Settings अपडेट करें।')}catch(e){alert('JSON Error: '+e.message)}}
-function libraryManager(){return `<div class="card"><h2>📁 Exam Folder Manager</h2><p class="muted">Folder या Subfolder चुनें। नया Folder चुने हुए Folder के अंदर बनेगा। Root Folder के लिए चयन हटाएँ।</p><label class="field">Exam कहाँ जोड़ना है?<select id="folderSelect" onchange="chosenFolder=this.value;render()">${folderOptions(chosenFolder)}</select></label><div class="flex"><button class="btn alt" onclick="createFolder()">+ New Folder / Subfolder</button><button class="btn alt" onclick="chosenFolder='';render()">Root चुनें</button></div><div style="margin-top:12px;border-top:1px solid #e1e8f0;padding-top:10px">${folderTree()}</div></div>`}
+let onlineAdminExamRows=[];
+async function loadOnlinePaidAdmin(){
+ if(!admin||!sb||!currentUser)return alert('Admin Login आवश्यक है।');
+ const {data:role,error:re}=await sb.from('admin_users').select('user_id').eq('user_id',currentUser.id).maybeSingle();
+ if(re||!role)return alert('Supabase Admin Permission नहीं मिली।');
+ const {data,error}=await sb.from('exams').select('id,title,category,description,duration,marks,negative,published,questions,is_paid,price').order('id',{ascending:false}).limit(500);
+ if(error)return alert('Exam list नहीं मिली: '+error.message);
+ onlineAdminExamRows=data||[];
+ const target=document.getElementById('online-paid-admin-list');
+ if(target)target.innerHTML=onlinePaidAdminRows();
+}
+function onlinePaidAdminPanel(){return `<div class="card"><h2>💳 Supabase Online Exams — Free / Paid</h2><p class="muted">यहाँ Online Exams की कीमत सीधे Supabase में Save होगी। भुगतान सत्यापन अभी उपलब्ध नहीं है।</p><button class="btn alt" onclick="loadOnlinePaidAdmin()">🔄 Load Online Exams</button><div id="online-paid-admin-list">${onlinePaidAdminRows()}</div></div>`}
+function onlinePaidAdminRows(){if(!onlineAdminExamRows.length)return '<p class="muted">Load Online Exams दबाएँ।</p>';return onlineAdminExamRows.map(e=>`<div class="card" style="margin-top:10px"><strong>${esc(e.title)}</strong> <small>#${e.id}</small><div class="flex"><label>Access <select id="paidMode_${e.id}" onchange="document.getElementById('paidPrice_${e.id}').disabled=this.value!=='paid'"><option value="free" ${!e.is_paid?'selected':''}>🟢 Free</option><option value="paid" ${e.is_paid?'selected':''}>🔒 Paid</option></select></label><label>₹ Price <input id="paidPrice_${e.id}" type="number" min="1" step="0.01" value="${Number(e.price||0)}" ${e.is_paid?'':'disabled'}></label><button class="btn" onclick="saveOnlinePaidExam(${Number(e.id)})">💾 Save</button><button class="btn alt" onclick="openOnlineExamEditor(${Number(e.id)})">✏️ Edit Exam</button></div><div id="onlineExamEdit_${e.id}"></div></div>`).join('')}
+
+function openOnlineExamEditor(id){
+ const e=onlineAdminExamRows.find(x=>Number(x.id)===Number(id));if(!admin||!e)return;
+ const target=document.getElementById('onlineExamEdit_'+id);if(!target)return;
+ if(target.innerHTML.trim()){target.innerHTML='';return;}
+ const field=(label,key,type='text')=>`<label class="field">${label}<input id="oe_${key}_${id}" type="${type}" value="${esc(String(e[key]??''))}"></label>`;
+ target.innerHTML=`<div class="card" style="background:#f5f9ff"><h3>✏️ Edit Exam #${id}</h3>
+ ${field('Exam Title','title')}${field('Category','category')}
+ <label class="field">Description<textarea id="oe_description_${id}" rows="3">${esc(e.description||'')}</textarea></label>
+ ${field('Time (minutes)','duration','number')}${field('Marks','marks','number')}${field('Negative Marking','negative','number')}
+ <label class="field">Published<select id="oe_published_${id}"><option value="true" ${e.published?'selected':''}>Published</option><option value="false" ${!e.published?'selected':''}>Draft</option></select></label>
+ <label class="field">Questions JSON (प्रश्न, Options, Solutions)<textarea id="oe_questions_${id}" rows="10" spellcheck="false" style="font-family:monospace;font-size:12px">${esc(JSON.stringify(e.questions||[],null,2))}</textarea></label>
+ <p class="tiny muted">प्रश्न बदलने से पहले JSON का Backup रखें। पुराने Results अपने आप Recalculate नहीं होंगे।</p>
+ <button class="btn" onclick="saveOnlineExamEditor(${id})">💾 Save All Changes</button> <button class="btn alt" onclick="openOnlineExamEditor(${id})">Cancel</button></div>`;
+}
+async function saveOnlineExamEditor(id){
+ if(!admin||!sb||!currentUser)return alert('Admin Login आवश्यक है।');
+ const {data:role,error:roleError}=await sb.from('admin_users').select('user_id').eq('user_id',currentUser.id).maybeSingle();
+ if(roleError||!role)return alert('Admin Permission नहीं मिली।');
+ const get=k=>document.getElementById(`oe_${k}_${id}`)?.value;
+ const title=(get('title')||'').trim(),duration=Number(get('duration')),marks=Number(get('marks')),negative=Number(get('negative'));
+ if(!title||!Number.isInteger(duration)||duration<1||!Number.isFinite(marks)||marks<=0||!Number.isFinite(negative)||negative<0)return alert('Title, Time, Marks और Negative Marking सही भरें।');
+ let questions;try{questions=JSON.parse(get('questions')||'[]')}catch(e){return alert('Questions JSON गलत है: '+e.message)}
+ if(!Array.isArray(questions))return alert('Questions में JSON array होना चाहिए।');
+ if(!confirm('Exam और Questions के बदलाव Supabase में Save करें?'))return;
+ const payload={title,category:(get('category')||'').trim(),description:get('description')||'',duration,marks,negative,published:get('published')==='true',questions};
+ const {data,error}=await sb.from('exams').update(payload).eq('id',id).select('id,title,category,description,duration,marks,negative,published,questions,is_paid,price');
+ if(error)return alert('Save Error: '+error.message);
+ if(!data?.length)return alert('Save नहीं हुआ। RLS जाँचें।');
+ const i=onlineAdminExamRows.findIndex(e=>Number(e.id)===Number(id));if(i>=0)onlineAdminExamRows[i]=data[0];
+ document.getElementById('online-paid-admin-list').innerHTML=onlinePaidAdminRows();
+ alert('Exam Supabase में Save हो गया।');await loadOnlineExams();
+}
+
+async function saveOnlinePaidExam(id){
+ if(!admin||!sb||!currentUser)return alert('Admin Login आवश्यक है।');
+ const is_paid=document.getElementById('paidMode_'+id)?.value==='paid';
+ const price=is_paid?Number(document.getElementById('paidPrice_'+id)?.value):0;
+ if(is_paid&&(!Number.isFinite(price)||price<=0))return alert('₹ Price 0 से अधिक रखें।');
+ const {data,error}=await sb.from('exams').update({is_paid,price}).eq('id',id).select('id,is_paid,price');
+ if(error)return alert('Supabase Save Error: '+error.message);
+ if(!data?.length)return alert('Save नहीं हुआ। Admin RLS / SELECT permission जाँचें।');
+ const row=onlineAdminExamRows.find(x=>x.id===id);if(row)Object.assign(row,{is_paid,price});
+ alert('Exam '+(is_paid?'🔒 Paid ₹'+price:'🟢 Free')+' के रूप में Supabase में Save हो गया।');
+ await loadOnlineExams();
+}
+function libraryManager(){return `${onlinePaidAdminPanel()}<div class="card"><h2>📁 Exam Folder Manager</h2><p class="muted">Folder या Subfolder चुनें। नया Folder चुने हुए Folder के अंदर बनेगा। Root Folder के लिए चयन हटाएँ।</p><label class="field">Exam कहाँ जोड़ना है?<select id="folderSelect" onchange="chosenFolder=this.value;render()">${folderOptions(chosenFolder)}</select></label><div class="flex"><button class="btn alt" onclick="createFolder()">+ New Folder / Subfolder</button><button class="btn alt" onclick="chosenFolder='';render()">Root चुनें</button></div><div style="margin-top:12px;border-top:1px solid #e1e8f0;padding-top:10px">${folderTree()}</div></div>`}
 function selectAdminPaperType(type){adminSelectedType=type;importError='';render()}
 function adminPaperTypeCards(){const types=[['Full Mock','Add Full Mock','पूरी परीक्षा का पेपर'],['Mock Test','Add Mock Test','अभ्यास मॉक टेस्ट'],['PYQ','Add PYQ + Year','पिछले वर्षों के प्रश्नपत्र'],['Subject Test','Add Subject Test','विषय के अनुसार टेस्ट'],['Chapter Test','Add Chapter Test','अध्याय के अनुसार टेस्ट']];return `<div class="card admin-test-types"><h2>📚 Student के अनुसार Exam Type चुनें</h2><p class="muted">नीचे किसी एक विकल्प पर क्लिक करें, फिर Folder और JSON से पेपर जोड़ें।</p><div class="admin-type-grid">${types.map(([type,label,desc])=>`<button type="button" class="admin-type-choice ${adminSelectedType===type?'selected':''}" onclick="selectAdminPaperType('${type}')"><b>${label}</b><small>${desc}</small>${adminSelectedType===type?'<span class="type-selected">✓ Selected</span>':''}</button>`).join('')}</div>${adminSelectedType==='PYQ'?`<label class="field"><b>PYQ Year (वर्ष)</b><input id="adminPYQYear" type="number" min="1950" max="2100" placeholder="जैसे 2024" value="${esc(adminPYQYear)}" oninput="adminPYQYear=this.value"></label>`:''}<p class="muted">चुना गया प्रकार: <b>${esc(adminSelectedType)}</b></p></div>`}
 function adminPaperTypeOptions(selected){return [['Full Mock','Full Mock'],['Mock Test','Mock Test'],['Subject Test','Subject Test'],['Chapter Test','Chapter Test'],['PYQ','PYQ — Previous Year Questions']].map(([v,label])=>`<option value="${v}" ${selected===v?'selected':''}>${label}</option>`).join('')}
