@@ -637,6 +637,11 @@ async function showOnlineExamQuestions(id){
  if(!sb||!currentUser){alert('Exam शुरू करने के लिए Student Login करें।');return;}
  const item=onlineExams.find(x=>String(x.id)===String(id));
  if(!item){alert('Exam नहीं मिला।');return;}
+ if(onlineAttempt&&Number(onlineAttempt.examId)!==Number(item.id)){
+  if(onlineAttempt.submitting){alert('Submit चल रहा है।');return;}
+  if(onlineAttemptTimer)clearInterval(onlineAttemptTimer);
+  onlineAttemptTimer=null;onlineAttempt=null;onlinePaused=false;
+ }
  onlineSelectedExam=item;
  // Read saved first result from a server RPC before allowing any new attempt.
  try{
@@ -657,7 +662,7 @@ async function showOnlineExamQuestions(id){
    if(a.status==='active'){go('online-attempt');return;}
    if(a.status==='paused'){await onlineStartAttempt();return;}
   }
- }catch(e){onlineQuestionState='error: '+e.message;console.error('Exam load failed:',e);}
+ }catch(e){onlineQuestionState='error: '+e.message;onlineAttempt=null;onlinePaused=false;console.error('Exam load failed:',e);alert('Exam Safety Check: '+e.message);}
  render();
 }
 
@@ -712,13 +717,15 @@ function onlineRestore(st){
  const remaining=Number(st.remaining_seconds??a.remaining_seconds??onlineSelectedExam.duration*60);
  const byId={};
  const raw=a.answers||{};
+ if(Number(a.exam_id??st.exam_id??onlineSelectedExam.id)!==Number(onlineSelectedExam.id))throw Error("Attempt दूसरे Exam का है।");
+ onlineValidateStoredAnswers(raw);
  for(let i=0;i<onlineExamQuestions.length;i++){
   const q=onlineExamQuestions[i];
   if(Object.prototype.hasOwnProperty.call(raw,String(q.id)))byId[i]=raw[String(q.id)];
  }
  onlineAttempt={
   id:a.id??st.attempt_id,
-  examId:onlineSelectedExam.id,title:onlineSelectedExam.title,
+  examId:onlineSelectedExam.id,title:onlineSelectedExam.title,questionIds:onlineExamQuestions.map(q=>Number(q.id)),
   answers:byId,visited:raw._visited||{0:true},review:raw._review||{},index:Math.max(0,Math.min(onlineExamQuestions.length-1,Number(raw._index)||0)),
   remaining,ends:Date.now()+remaining*1000,submitting:false
  };
@@ -739,6 +746,7 @@ async function onlineStartAttempt(){
   // If this student already has a paused attempt, resume it instead of creating a duplicate.
   if(onlineAttempt&&onlinePaused&&onlineAttempt.id){
    const a=onlineAttempt;
+   onlineAssertIntegrity(a);
    const st=await onlineRpc('examsetu_resume_attempt',{p_attempt_id:Number(a.id)});
    if(st?.status==='submitted'){
     await esLoadFinalResult(onlineSelectedExam.id);onlineAttempt=null;onlinePaused=false;go('online-result');return;
@@ -765,17 +773,33 @@ function onlineNavigate(i){if(!onlineAttempt||onlinePaused||onlineAttempt.submit
 function onlineToggleReview(){if(!onlineAttempt||onlinePaused)return;const i=onlineAttempt.index;onlineAttempt.review[i]=!onlineAttempt.review[i];render();onlineQueueProgressSave()}
 function onlineToggleOMR(){onlineOMR=!onlineOMR;render()}
 let onlineSaveChain=Promise.resolve();
+function onlineAssertIntegrity(a=onlineAttempt){
+ if(!a||!onlineSelectedExam||Number(a.examId)!==Number(onlineSelectedExam.id))throw Error('Exam mismatch: दूसरे Exam का Attempt लोड हुआ है।');
+ if(!onlineExamQuestions.length||onlineExamQuestions.some(q=>!Number.isSafeInteger(Number(q.id))))throw Error('Question IDs उपलब्ध नहीं हैं।');
+ const ids=new Set(onlineExamQuestions.map(q=>Number(q.id)));
+ if(ids.size!==onlineExamQuestions.length)throw Error('Duplicate Question IDs मिली हैं।');
+ if(a.questionIds && (a.questionIds.length!==onlineExamQuestions.length||a.questionIds.some((id,i)=>Number(id)!==Number(onlineExamQuestions[i].id))))throw Error('Exam Questions बदल गए हैं। सुरक्षित रहने के लिए Exam दोबारा खोलें।');
+ return ids;
+}
+function onlineValidateStoredAnswers(raw){
+ const ids=new Set(onlineExamQuestions.map(q=>String(q.id)));
+ const invalid=Object.keys(raw||{}).filter(k=>/^\d+$/.test(k)&&!ids.has(k));
+ if(invalid.length)throw Error('इस Attempt में '+invalid.length+' उत्तर दूसरे Exam की Question IDs से जुड़े हैं। Answers सुरक्षित हैं; Submit बंद है। Admin से जाँच करवाएँ।');
+}
+
 function onlineQueueProgressSave(){
  const id=onlineAttempt?.id;
  if(!id||onlinePaused)return;
- const payload=onlineProgressPayload();
+ let payload;try{payload=onlineProgressPayload()}catch(e){alert(e.message);return;}
  onlineSaveChain=onlineSaveChain.catch(()=>{}).then(async()=>{
   if(!onlineAttempt||onlineAttempt.id!==id||onlinePaused)return;
+  onlineAssertIntegrity(onlineAttempt);
   return onlineRpc('examsetu_save_progress',{p_attempt_id:Number(id),p_answers:payload});
  }).catch(e=>console.warn('Autosave failed:',e.message));
 }
 function onlineProgressPayload(){
- const a=onlineAttempt, payload={_index:a.index,_visited:a.visited,_review:a.review};
+ const a=onlineAttempt;onlineAssertIntegrity(a);
+ const payload={_index:a.index,_visited:a.visited,_review:a.review};
  for(const [index,value] of Object.entries(a.answers)){
   const q=onlineExamQuestions[Number(index)];
   if(q && Number.isInteger(Number(value)) && Number(value)>=0 && Number(value)<=3) payload[String(q.id)]=Number(value);
@@ -797,6 +821,7 @@ async function onlinePauseResume(){
   if(!a.id)throw Error('Attempt ID उपलब्ध नहीं है। Exam दोबारा खोलें।');
   const wasPaused=onlinePaused;
   const remaining=wasPaused?a.remaining:Math.max(0,Math.ceil((a.ends-Date.now())/1000));
+  onlineAssertIntegrity(a);
   if(!wasPaused){await onlineSaveChain;await onlineSaveProgress();}
   const st=wasPaused
    ?await onlineRpc('examsetu_resume_attempt',{p_attempt_id:Number(a.id)})
@@ -820,11 +845,18 @@ async function onlineSubmit(automatic=false){
  a.submitting=true;clearInterval(onlineAttemptTimer);onlineAttemptTimer=null;render();
  try{
   if(!a.id)throw Error('Attempt ID उपलब्ध नहीं है।');
+  onlineAssertIntegrity(a);
+  await onlineSaveChain;
+  const {data:serverAttempt,error:serverError}=await sb.from('exam_attempts').select('id,exam_id,answers,status').eq('id',a.id).eq('user_id',currentUser.id).single();
+  if(serverError)throw Error('Attempt verification failed: '+serverError.message);
+  if(Number(serverAttempt.exam_id)!==Number(a.examId))throw Error('Server Attempt का Exam अलग है।');
+  onlineValidateStoredAnswers(serverAttempt.answers||{});
   const answers={};
   for(const [index,value] of Object.entries(a.answers)){
    const q=onlineExamQuestions[Number(index)];
    if(q&&Number.isInteger(Number(value))&&Number(value)>=0&&Number(value)<=3)answers[String(q.id)]=Number(value);
   }
+  if(Object.keys(answers).length!==Object.keys(a.answers).length)throw Error('Answers count mismatch; Submit रोका गया।');
   const st=await onlineRpc('examsetu_submit_attempt',{p_attempt_id:Number(a.id),p_answers:answers});
   onlineAttempt=null;onlinePaused=false;
   await esLoadFinalResult(onlineSelectedExam.id);
