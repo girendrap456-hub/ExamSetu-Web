@@ -663,7 +663,7 @@ async function onlineRpc(name,args){const {data,error}=await sb.rpc(name,args);i
 async function loadOnlineExams(){
  if(!sb||!currentUser)return;onlineLoadState='loading';
  try{
-  const {data,error}=await sb.from('exams').select('id,title,category,description,duration,marks,negative,published,is_paid,price,created_at').eq('published',true).order('created_at',{ascending:false}).limit(200);
+  const {data,error}=await sb.from('exams').select('id,title,category,description,duration,marks,negative,published,is_paid,price,cutoff_marks,created_at').eq('published',true).order('created_at',{ascending:false}).limit(200);
   if(error)throw error;
   onlineExams=(data||[]).map(e=>({...e,duration_minutes:e.duration,negative_mark:e.negative}));
   onlineLoadState='ready';onlineRanks={};
@@ -1182,7 +1182,13 @@ async function esLoadReviewTranslations(){
  }catch(err){console.warn('ExamSetu review translation fetch:',err?.message||err)}
  finally{esReviewTranslationLoading=false}
 }
-function esPracticeSelect(i,j){return;}
+function esPracticeSelect(i,j){
+ const qs=onlineAttemptResult?.questions||[];
+ if(!Number.isInteger(i)||i<0||i>=qs.length||!Number.isInteger(j)||j<0||j>3)return;
+ if(Object.prototype.hasOwnProperty.call(esPracticeAnswers,i))return;
+ esPracticeAnswers[i]=j;
+ render();
+}
 function esSolutionJump(i){const el=document.querySelector('.es-solution-omr');if(el)esSolutionOmrScroll=el.scrollTop;esPracticeIndex=i;render();requestAnimationFrame(()=>{const p=document.querySelector('.es-solution-omr');if(p)p.scrollTop=esSolutionOmrScroll});window.scrollTo(0,0)}
 function esSolutionToggleOmr(){const el=document.querySelector('.es-solution-omr');if(el)esSolutionOmrScroll=el.scrollTop;esSolutionOmrOpen=!esSolutionOmrOpen;render();requestAnimationFrame(()=>{const p=document.querySelector('.es-solution-omr');if(p)p.scrollTop=esSolutionOmrScroll})}
 function esPracticeLanguage(v){esPracticeLang=v;render();if(v==='en')esLoadReviewTranslations()}
@@ -1198,19 +1204,26 @@ function esPracticeHtml(){
  const original=rawOriginal===null||rawOriginal===undefined||rawOriginal===''?-1:Number(rawOriginal);
  const rawCorrect=q.correct_index??q.correct??q.answer;
  const correct=rawCorrect===null||rawCorrect===undefined?-1:Number(rawCorrect);
- const picked=undefined;const hasRetry=true;
+ const hasRetry=Object.prototype.hasOwnProperty.call(esPracticeAnswers,i);
+ const picked=hasRetry?Number(esPracticeAnswers[i]):-1;
  const sol=english&&(q.solution_en||o.solution_en)?(q.solution_en||o.solution_en):(q.solution||o.solution||'इस प्रश्न का विस्तृत समाधान उपलब्ध नहीं है।');
  const validCorrect=Number.isInteger(correct)&&correct>=0&&correct<opts.length;
  const status=original<0?'Skipped':original===correct?'Correct':'Incorrect';
  const buttons=opts.map((v,j)=>{
-  // No first-attempt or correct-answer indicators until the student chooses once.
-  const isOriginal=j===original,isCorrect=validCorrect&&j===correct,isRetry=false;
-  const tone=isCorrect?'correct':isOriginal?'wrong':'';
-  const flags=[isOriginal?'आपका उत्तर':'',isCorrect?'सही उत्तर':''].filter(Boolean).join(' · ');
-  return `<button class="option ${tone} ${isOriginal?'es-first-answer':''} ${isRetry?'es-retry-answer':''}" ${hasRetry?'disabled':''} disabled>${String.fromCharCode(65+j)}. ${esc(v)} ${hasRetry?(isCorrect?'✓':(isOriginal||isRetry)?'✗':''):''}${flags?`<small class="es-answer-label">${esc(flags)}</small>`:''}</button>`;
+  const isCorrect=validCorrect&&j===correct;
+  const isPicked=hasRetry&&j===picked;
+  const tone=hasRetry?(isCorrect?'correct':isPicked?'wrong':''):'';
+  const flag=hasRetry?(isCorrect?'सही उत्तर':isPicked?'आपका Practice उत्तर':''):'';
+  return `<button type="button" class="option ${tone}" ${hasRetry?'disabled':''} onclick="esPracticeSelect(${i},${j})">${String.fromCharCode(65+j)}. ${esc(v)} ${hasRetry?(isCorrect?'✓':isPicked?'✗':''):''}${flag?`<small class="es-answer-label">${esc(flag)}</small>`:''}</button>`;
  }).join('');
- const outcome=`<div class="es-review-meta"><span>आपका उत्तर: ${original>=0?String.fromCharCode(65+original):'नहीं दिया'}</span><span>सही उत्तर: ${correct>=0?String.fromCharCode(65+correct):'—'}</span></div>`;
- const palette=qs.map((item,n)=>{const raw=item.selected_index??item.selected??item.user_answer??item.selected_answer??item.user_selected_index;const given=raw!==null&&raw!==undefined&&raw!==''&&Number(raw)>=0;const answer=item.correct_index??item.correct??item.answer;const known=answer!==null&&answer!==undefined&&Number.isInteger(Number(answer))&&Number(answer)>=0&&Number(answer)<=3;const tone=!given?'es-sol-skip':known&&Number(raw)===Number(answer)?'es-sol-right':known?'es-sol-wrong':'es-sol-skip';return `<button type="button" class="es-sol-number ${tone} ${n===i?'es-sol-current':''}" title="Question ${n+1}" onclick="esSolutionJump(${n})">${n+1}</button>`}).join('');
+ const outcome=hasRetry?`<div class="es-review-meta"><span>Practice उत्तर: ${String.fromCharCode(65+picked)}</span><span>सही उत्तर: ${validCorrect?String.fromCharCode(65+correct):'—'}</span></div>`:'<p class="tiny muted">उत्तर चुनने के बाद सही जवाब और Solution दिखाई देगा।</p>';
+ const palette=qs.map((item,n)=>{
+  const attempted=Object.prototype.hasOwnProperty.call(esPracticeAnswers,n);
+  const answer=item.correct_index??item.correct??item.answer;
+  const known=answer!==null&&answer!==undefined&&Number.isInteger(Number(answer))&&Number(answer)>=0&&Number(answer)<=3;
+  const tone=!attempted?'es-sol-skip':known&&Number(esPracticeAnswers[n])===Number(answer)?'es-sol-right':known?'es-sol-wrong':'es-sol-skip';
+  return `<button type="button" class="es-sol-number ${tone} ${n===i?'es-sol-current':''}" title="Question ${n+1}" onclick="esSolutionJump(${n})">${n+1}</button>`;
+ }).join('');
  const sidebar=esSolutionOmrOpen?`<aside class="es-solution-omr" aria-label="Solution question palette" onscroll="esSolutionOmrScroll=this.scrollTop"><div class="es-sol-omr-head"><b>Question OMR</b><button type="button" class="btn alt" onclick="esSolutionToggleOmr()">Hide ✕</button></div><div class="es-sol-omr-grid">${palette}</div><div class="es-sol-legend"><span>🟢 सही</span><span>🔴 गलत</span><span>⬜ छोड़ा हुआ / उपलब्ध नहीं</span></div></aside>`:`<button type="button" class="es-sol-open" onclick="esSolutionToggleOmr()">❮</button>`;
  return `<div class="es-solution-shell ${esSolutionOmrOpen?'':'es-sol-collapsed'}"><div class="es-dashboard es-practice es-solution-review"><section class="card"><div class="flex space"><span class="tiny">${i+1}/${qs.length}</span></div>${english&&!available?'<p class="tiny muted">English translation is not available for this question. Original text is shown.</p>':''}<h2>Q${i+1}. ${esc(title)}</h2>${buttons}${outcome}${hasRetry?`<div class="practice-solution"><p><b>Solution:</b> ${esc(sol)}</p></div>`:''}</section><div class="es-review-nav"><button class="btn alt" ${i===0?'disabled':''} onclick="esPracticeIndex--;render();window.scrollTo(0,0)">← Previous</button><button class="btn" onclick="${i===qs.length-1?"go('online-result')":"esPracticeIndex++;render();window.scrollTo(0,0)"}">${i===qs.length-1?'Back to Analysis':'Next →'}</button></div></div>${sidebar}</div>`;
 }
@@ -1436,7 +1449,7 @@ async function loadOnlinePaidAdmin(){
  if(!admin||!sb||!currentUser)return alert('Admin Login आवश्यक है।');
  const {data:role,error:re}=await sb.from('admin_users').select('user_id').eq('user_id',currentUser.id).maybeSingle();
  if(re||!role)return alert('Supabase Admin Permission नहीं मिली।');
- const {data,error}=await sb.from('exams').select('id,title,category,description,duration,marks,negative,published,questions,is_paid,price').order('id',{ascending:false}).limit(500);
+ const {data,error}=await sb.from('exams').select('id,title,category,description,duration,marks,negative,published,questions,is_paid,price,cutoff_marks').order('id',{ascending:false}).limit(500);
  if(error)return alert('Exam list नहीं मिली: '+error.message);
  onlineAdminExamRows=data||[];
  const target=document.getElementById('online-paid-admin-list');
@@ -1470,7 +1483,7 @@ async function saveOnlineExamEditor(id){
  if(!Array.isArray(questions))return alert('Questions में JSON array होना चाहिए।');
  if(!confirm('Exam और Questions के बदलाव Supabase में Save करें?'))return;
  const payload={title,category:(get('category')||'').trim(),description:get('description')||'',duration,marks,negative,published:get('published')==='true',questions};
- const {data,error}=await sb.from('exams').update(payload).eq('id',id).select('id,title,category,description,duration,marks,negative,published,questions,is_paid,price');
+ const {data,error}=await sb.from('exams').update(payload).eq('id',id).select('id,title,category,description,duration,marks,negative,published,questions,is_paid,price,cutoff_marks');
  if(error)return alert('Save Error: '+error.message);
  if(!data?.length)return alert('Save नहीं हुआ। RLS जाँचें।');
  const i=onlineAdminExamRows.findIndex(e=>Number(e.id)===Number(id));if(i>=0)onlineAdminExamRows[i]=data[0];
@@ -1501,7 +1514,7 @@ async function loadAdminOnlineExams(){
  adminOnlineState='loading';
  try{
   const {data:isAdmin,error:roleError}=await sb.rpc('examsetu_is_admin'); if(roleError||isAdmin!==true)throw Error('Admin role आवश्यक है।');
-  const {data,error}=await sb.from('exams').select('id,title,category,published,created_at').order('created_at',{ascending:false}).limit(500);
+  const {data,error}=await sb.from('exams').select('id,title,category,published,cutoff_marks,marks,questions,created_at').order('created_at',{ascending:false}).limit(500);
   if(error)throw error;
   adminOnlineExams=data||[];adminOnlineState='ready';
  }catch(e){adminOnlineState='error: '+(e.message||String(e))}
@@ -1530,8 +1543,22 @@ async function setOnlineExamPublished(id,published){
   await loadAdminOnlineExams();await loadOnlineExams();
  }catch(e){alert('Publish Update FAILED: '+(e.message||String(e)))}
 }
+async function saveOnlineExamCutoff(id){
+ if(!admin||!sb||!currentUser)return alert('Admin Login आवश्यक है।');
+ const el=document.getElementById('onlineCutoff_'+id);
+ const raw=(el?.value||'').trim();
+ if(raw!==''&&(!Number.isFinite(Number(raw))||Number(raw)<0))return alert('Cutoff 0 या उससे अधिक Marks में रखें।');
+ try{
+  const {data,error}=await sb.rpc('examsetu_admin_set_cutoff',{p_exam_id:Number(id),p_cutoff:raw===''?null:Number(raw)});
+  if(error)throw error;
+  const row=adminOnlineExams.find(x=>Number(x.id)===Number(id));if(row)row.cutoff_marks=data?.cutoff_marks??null;
+  await loadOnlineExams();
+  alert(raw===''?'Cutoff हट गया। अब Pending Cutoff दिखेगा।':'Cutoff '+raw+' Marks Save हो गया।');
+  render();
+ }catch(e){alert('Cutoff Save FAILED: '+(e.message||String(e)))}
+}
 function adminOnlineExamManager(){
- return `<div class="card"><h2>🌐 Supabase Online Exams (${adminOnlineExams.length})</h2><p class="muted">यह सूची Online Database से आती है। Delete स्थायी है और सभी Students पर लागू होगा।</p><button class="btn alt" onclick="loadAdminOnlineExams()">↻ Load / Refresh Online Exams</button>${adminOnlineState==='loading'?'<p>लोड हो रहा है…</p>':adminOnlineState.startsWith('error:')?`<p class="danger">${esc(adminOnlineState)}</p>`:adminOnlineState==='not-loaded'?'<p class="muted">Online Exams देखने के लिए Load दबाएँ।</p>':adminOnlineExams.length?adminOnlineExams.map(x=>`<div style="padding:12px 0;border-bottom:1px solid #dce6f1"><b>${esc(x.title)}</b> <span class="chip">${x.published?'🟢 Published':'⚪ Draft'}</span><p class="tiny muted">${esc(x.category||'')}</p><div class="flex"><button class="btn alt" onclick="setOnlineExamPublished('${esc(String(x.id))}',${!x.published})">${x.published?'Unpublish':'Publish'}</button><button class="btn alt" style="color:#b52929" onclick="deleteOnlineExam('${esc(String(x.id))}')">🗑 Delete Online Exam</button></div></div>`).join(''):'<p>कोई Online Exam नहीं मिला।</p>'}</div>`;
+ return `<div class="card"><h2>🌐 Supabase Online Exams (${adminOnlineExams.length})</h2><p class="muted">यह सूची Online Database से आती है। Delete स्थायी है और सभी Students पर लागू होगा।</p><button class="btn alt" onclick="loadAdminOnlineExams()">↻ Load / Refresh Online Exams</button>${adminOnlineState==='loading'?'<p>लोड हो रहा है…</p>':adminOnlineState.startsWith('error:')?`<p class="danger">${esc(adminOnlineState)}</p>`:adminOnlineState==='not-loaded'?'<p class="muted">Online Exams देखने के लिए Load दबाएँ।</p>':adminOnlineExams.length?adminOnlineExams.map(x=>`<div style="padding:12px 0;border-bottom:1px solid #dce6f1"><b>${esc(x.title)}</b> <span class="chip">${x.published?'🟢 Published':'⚪ Draft'}</span><p class="tiny muted">${esc(x.category||'')}</p><div class="flex"><label class="field">Cutoff Marks (खाली = Pending)<input id="onlineCutoff_${x.id}" type="number" min="0" step="0.01" style="max-width:160px" value="${x.cutoff_marks==null?'':x.cutoff_marks}"></label><button class="btn" onclick="saveOnlineExamCutoff('${esc(String(x.id))}')">Save Cutoff</button></div><div class="flex"><button class="btn alt" onclick="setOnlineExamPublished('${esc(String(x.id))}',${!x.published})">${x.published?'Unpublish':'Publish'}</button><button class="btn alt" style="color:#b52929" onclick="deleteOnlineExam('${esc(String(x.id))}')">🗑 Delete Online Exam</button></div></div>`).join(''):'<p>कोई Online Exam नहीं मिला।</p>'}</div>`;
 }
 function importManager(){return `${adminPaperTypeCards()}${libraryManager()}${examEditPanel()}${adminOnlineExamManager()}<div class="card"><h2>📥 ${esc(adminSelectedType)} — JSON Upload</h2><p class="muted">ऊपर चुने गए प्रकार का पेपर यहाँ Import करें।</p><label class="field"><b>2. Select JSON File</b><input type="file" accept=".json,application/json" onchange="selectExamFile(this)"></label>${importError?`<p class="danger">⚠ ${esc(importError)}</p>`:''}${importedPreview?`<div class="stat"><b>${esc(importedPreview.title)}</b><p>${importedPreview.questions.length} Questions • ${importedPreview.minutes} Minutes</p><p>📁 ${esc(folderPath(chosenFolder))}</p></div><div class="marks-settings"><label class="field">एक Question के Marks<input id="adminMarks" type="number" min="0.01" step="0.01" value="${importedPreview.marks_per_question||3}"></label><label class="field"><input id="adminNegEnabled" type="checkbox" ${importedPreview.negative_mark>0?'checked':''} onchange="document.getElementById('adminNegative').disabled=!this.checked"> Negative Marking लागू करें</label><label class="field">एक गलत उत्तर पर कितने Marks कटेंगे?<input id="adminNegative" type="number" min="0" step="0.01" value="${importedPreview.negative_mark||0}" ${importedPreview.negative_mark>0?'':'disabled'}></label><label class="field">Cutoff Marks<input id="adminCutoff" type="number" min="0" step="0.01" value="0"></label></div><label class="field"><input id="adminExamPublished" type="checkbox" checked> <b>Published (Students को दिखाएँ)</b></label><p class="muted tiny">Unchecked रखने पर Exam Draft रहेगा और Students को नहीं दिखेगा।</p><br><button class="btn" onclick="importExamNow()">✓ Add ${adminSelectedType==='PYQ'?'PYQ':'Exam'} to Folder</button>`:'<p class="muted">Folder चुनें और JSON File Upload करें। फिर Marks, Cutoff और Add Button दिखाई देंगे।</p>'}</div><div class="card"><h2>Imported Exams (${importedExams.length})</h2>${importedExams.map(x=>`<p>📄 <b>${esc(x.title)}</b> • ${x.questions.length} Questions • ${esc(x.type||'Full Mock')} ${x.pyq_year?'('+esc(x.pyq_year)+')':''} • ${x.marks_per_question||3} Marks/Question • Negative ${x.negative_mark||0}<br><small>📁 ${esc(folderPath(x.folderId))} · ${x.published?'🟢 Published':'⚪ Draft'}</small><br><button class="btn alt" onclick="editImportedExam('${esc(x.id)}')">✏️ Edit</button> <button class="btn alt" onclick="deleteImportedExam('${esc(x.id)}')">🗑 Delete</button></p>`).join('')||'<p class="muted">अभी कोई Exam Import नहीं किया गया।</p>'}</div>`}
 
