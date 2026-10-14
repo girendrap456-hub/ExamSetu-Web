@@ -615,6 +615,7 @@ async function applyOnlineUser(user){currentUser=user;loggedIn=true;loginEmail=u
  // Display name comes from Supabase Auth metadata; profiles table does not exist.
  demoAccount={name,email:user.email,id:user.id};
  await loadOnlineExams();
+ esHeartbeat();
  // Role is checked again on admin entry. Never infer admin from a client-stored flag.
 }
 async function registerDemo(){
@@ -1224,6 +1225,41 @@ function esPositionHeaderControls(){
  for(const b of controls){if(inner)target.appendChild(b);else bar.appendChild(b)}
  target.style.display=inner?'flex':'none';
 }
+// ExamSetu verified admin stats + authenticated presence (no sample values).
+let esLiveStatsLastRequest=0;
+function esLiveStatsMarkup(){return `<div id="es-live-stats"><p class="muted">Supabase से Live Statistics लोड हो रहे हैं…</p></div>`}
+async function esRefreshLiveStats(){
+ const target=document.getElementById('es-live-stats');
+ if(!target||!admin||!sb)return;
+ const request=++esLiveStatsLastRequest;
+ try{
+  const [statsResponse,onlineResponse]=await Promise.all([
+   sb.rpc('examsetu_admin_live_stats'),sb.rpc('examsetu_admin_online_users')
+  ]);
+  if(statsResponse.error)throw statsResponse.error;
+  if(onlineResponse.error)throw onlineResponse.error;
+  if(request!==esLiveStatsLastRequest||!admin||!['admin','students','analytics'].includes(page))return;
+  const el=document.getElementById('es-live-stats');if(!el)return;
+  const d=statsResponse.data||{};
+  const count=v=>Number.isFinite(Number(v))?String(Number(v)):'—';
+  const rows=Array.isArray(d.student_rows)?d.student_rows:[];
+  el.innerHTML=`<div class="grid">
+   <div class="stat"><b>${count(d.students)}</b>Total Students</div>
+   <div class="stat"><b>${count(d.exams)}</b>Total Exams</div>
+   <div class="stat"><b>${count(d.attempts)}</b>Submitted Attempts</div>
+   <div class="stat"><b>${count(onlineResponse.data)}</b>Active Users (2 min)</div>
+  </div><h2>Student Attempts</h2><div class="card" style="overflow-x:auto"><table style="width:100%;text-align:left"><thead><tr><th>Student</th><th>Attempts</th><th>Best Score</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(String(r.name||'Student'))}</td><td>${count(r.attempts)}</td><td>${r.best_score==null?'—':count(r.best_score)}</td></tr>`).join('')||'<tr><td colspan="3">No verified records</td></tr>'}</tbody></table></div><p class="tiny muted">Online = पिछले 2 मिनट में Heartbeat; Submitted Attempts results table पर आधारित हैं।</p>`;
+ }catch(e){const el=document.getElementById('es-live-stats');if(el&&request===esLiveStatsLastRequest)el.textContent='Live Statistics Error: '+(e.message||String(e));}
+}
+let esHeartbeatBusy=false;
+async function esHeartbeat(){
+ if(!sb||!loggedIn||!currentUser||document.visibilityState==='hidden'||esHeartbeatBusy)return;
+ esHeartbeatBusy=true;
+ try{const {error}=await sb.rpc('examsetu_heartbeat');if(error)console.warn('ExamSetu heartbeat:',error.message)}
+ catch(e){console.warn('ExamSetu heartbeat:',e)}finally{esHeartbeatBusy=false}
+}
+setInterval(()=>{esHeartbeat();if(admin&&['admin','students','analytics'].includes(page))esRefreshLiveStats()},30000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){esHeartbeat();if(admin&&['admin','students','analytics'].includes(page))esRefreshLiveStats()}});
 function render(){const __esSolutionScroll=document.querySelector('.es-solution-omr')?.scrollTop;if(__esSolutionScroll!==undefined)esSolutionOmrScroll=__esSolutionScroll;const __esOMRScroll=document.querySelector('.online-test-omr')?.scrollTop;if(__esOMRScroll!==undefined)esOnlineOmrSavedScroll=__esOMRScroll;const __esDemoScroll=document.querySelector('.omr-sidebar')?.scrollTop;if(__esDemoScroll!==undefined)esDemoOmrSavedScroll=__esDemoScroll;window.examSetuExamActive=((page==='exam'&&mode==='test')||page==='online-attempt');document.body.classList.toggle('home-nav-visible',loggedIn&&!admin);document.body.classList.toggle('home-menu-visible',page==='home'&&loggedIn&&!admin);document.body.classList.toggle('admin-mode',admin);document.body.classList.toggle('show-inline-back',loggedIn&&!admin&&!['home','exam','signup','login','forgot'].includes(page));document.body.classList.toggle('auth-screen',['signup','login','forgot','admin-login'].includes(page));document.body.classList.toggle('exam-screen',page==='exam'||page==='online-attempt');document.body.classList.toggle('online-exam-screen',page==='online-attempt');document.body.classList.toggle('es-inner-nav',loggedIn&&!admin&&page!=='home'&&page!=='tests'&&page!=='online-exams');document.body.classList.toggle('es-result-clean',['online-result','online-solution'].includes(page));document.body.classList.toggle('practice-screen',page==='exam'&&mode==='practice');navHtml();const headerAvatar=$('header-student-avatar');if(headerAvatar)headerAvatar.textContent=studentAvatar();const esNameEl=$('es-header-name');if(esNameEl)esNameEl.textContent=(loggedIn&&!admin)?(esStudentName()==='Student'?'':esStudentName()):'';esPositionHeaderControls();let h='',backbtn='' ,languagebtn=`<label class="exam-language-select" title="Question language">🌐 <select aria-label="Question language" onchange="${page==='online-solution'?'esPracticeLanguage':page==='online-attempt'?'onlineSetLanguage':'setQuestionLanguage'}(this.value)"><option value="hi" ${(page==='online-solution'?esPracticeLang:page==='online-attempt'?onlineLang:lang)==='hi'?'selected':''}>हिन्दी</option><option value="en" ${(page==='online-solution'?esPracticeLang:page==='online-attempt'?onlineLang:lang)==='en'?'selected':''}>English</option></select></label>`;
 if(page==='signup'){h=`<div class="auth-card"><h1>👤 Create Student Account</h1><p class="muted">पहली बार Account बनाएँ, फिर Email और Password से Login करें।</p><label class="field">Student Name<input id="signupName" autocomplete="name" placeholder="पूरा नाम"></label><label class="field">Email<input id="signupEmail" type="email" autocomplete="username" placeholder="example@gmail.com"></label><label class="field">Password<input id="signupPassword" type="password" autocomplete="new-password" placeholder="कम से कम 8 अक्षर"></label><label class="field">Confirm Password<input id="signupConfirm" type="password" autocomplete="new-password"></label>${authError?`<p class="danger">${esc(authError)}</p>`:''}<button class="btn" onclick="registerDemo()">Create Account →</button> <button class="btn alt" onclick="authError='';go('login')">Already registered? Login</button><p class="tiny muted">Supabase Online Account • Email Confirmation आवश्यक है।</p></div>`}
 else if(page==='login'){h=`<div class="auth-card"><h1>🔐 Student Login</h1><p class="muted"></p><label class="field">Email<input id="loginEmail" type="email" autocomplete="username" value="${esc(loginEmail)}" placeholder="Registered Email"></label><label class="field">Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password"></label>${authError?`<p class="danger">${esc(authError)}</p>`:''}<button class="btn" onclick="loginDemo()">Login to ExamSetu →</button> <button class="btn alt" onclick="authError='';go('signup')">Create Account</button><p><button class="back" onclick="go('forgot')">Forgot Password?</button></p></div>`}
@@ -1247,11 +1283,11 @@ else if(page==='notes'){h='<h1>📚 Study Materials</h1>'+['UP GK Free Notes','S
 else if(page==='rank'){h=esRealLeaderboardHtml();setTimeout(esFetchRealLeaderboard,0)}
 else if(page==='profile'){h=`<h1>${studentAvatar()} My Profile</h1><div class="card"><div class="profile-avatar-display">${studentAvatar()}</div><b>${esc(demoAccount?.name||"Demo Student")}</b><p>ExamSetu Learner • ${esc(demoAccount?.email||"")}</p><h2>अपना Profile Icon चुनें</h2><p class="muted tiny">यह केवल आपकी Student ID का Icon बदलेगा। ExamSetu Logo और Test Series Icons नहीं बदलेंगे।</p><div class="student-avatar-grid">${STUDENT_AVATARS.map(a=>`<button type="button" class="student-avatar-option ${studentAvatar()===a?'chosen':''}" onclick="chooseStudentAvatar('${a}')" aria-label="Choose profile avatar ${a}" title="Profile Icon">${a}</button>`).join('')}</div></div><button class="btn" onclick="go('history')">📜 My Test History</button>`+['Bookmarked Questions','Wrong Question Practice','Study Goals','Premium Membership','Notifications'].map(x=>`<div class="card">${x} <span class="chip">Planned</span></div>`).join('')}
 else if(page==='admin-login'){h=`<h1>🔐 Admin Access</h1><div class="card"><p>Admin Panel खोलने के लिए पहले अपनी Admin ID से Student Login करें। फिर Logo पर 5 बार Tap करके यहाँ आएँ।</p><button class="btn" onclick="openAdminOnline()">Open Admin Panel →</button><p class="tiny muted">Admin Access केवल Supabase में admin Role वाली Login ID को मिलेगा।</p></div>`}
-else if(page==='admin'){h=`<h1>Admin Dashboard</h1><p class="muted">Login Online है; Exams और Results अभी इस Device के Demo Data हैं।</p><div class="grid"><div class="stat"><b>18</b>Exams</div><div class="stat"><b>1200</b>Students</div><div class="stat"><b>86</b>Attempts</div></div><div class="hero"><h2>Add New Exam</h2><button class="btn" onclick="go('add')">Open Exam Settings →</button></div>`}
+else if(page==='admin'){h=`<h1>Admin Dashboard</h1>${esLiveStatsMarkup()}<div class="hero"><h2>Add New Exam</h2><button class="btn" onclick="go('add')">Open Exam Settings →</button></div>`}
 else if(page==='add'){h=`<h1>➕ Add / Edit Exam</h1>${importManager()}`}
 else if(page==='import'){h=`<h1>📥 JSON Exam Import</h1>${importManager()}`}
-else if(['students','analytics'].includes(page)){const demoRows=[{name:demoAccount?.name||'Student',exams:history.length,avg:history.length?Math.round(history.reduce((n,r)=>n+r.score,0)/history.length/9*100):0,rank:history.length?1:'—'}, {name:'Rahul (Sample)',exams:18,avg:88,rank:2},{name:'Priya (Sample)',exams:15,avg:84,rank:3}];h=`<h1>${page==='students'?'👥 Student Management':'📈 Admin Analytics'}</h1><p class="muted">Browser Demo + Sample Data — Supabase के वास्तविक Students नहीं।</p><div class="grid"><div class="stat"><b>${demoAccount?1:0}</b>Demo Accounts</div><div class="stat"><b>${history.length}</b>Demo Test Attempts</div><div class="stat"><b>${history.length?Math.round(history.reduce((n,r)=>n+r.correct,0)/(history.length*3)*100):0}%</b>Practice Accuracy</div></div><h2>Student Rankings (Sample)</h2><div class="card"><table style="width:100%;text-align:left;border-collapse:collapse"><tr><th>Student</th><th>Tests</th><th>Average</th><th>Rank</th></tr>${demoRows.map(r=>`<tr><td style="padding:12px 4px">${esc(r.name)}</td><td>${r.exams}</td><td>${r.avg}%</td><td>${r.rank}</td></tr>`).join('')}</table></div><p class="tiny muted">Live Rank, Active Users और सभी Student Attempts के लिए Supabase जरूरी है। Practice Attempts इनमें नहीं गिने जाते।</p>`}
-$('main').innerHTML=(page==='exam'?h:`<div class="toolbar"><span class="tiny muted"></span></div>`+h);applyPageLanguage();requestAnimationFrame(()=>{const a=document.querySelector('.online-test-omr');if(a)a.scrollTop=esOnlineOmrSavedScroll;const b=document.querySelector('.omr-sidebar');if(b)b.scrollTop=esDemoOmrSavedScroll;const c=document.querySelector('.es-solution-omr');if(c)c.scrollTop=esSolutionOmrScroll;})}
+else if(['students','analytics'].includes(page)){h=`<h1>${page==='students'?'👥 Student Management':'📈 Admin Analytics'}</h1>${esLiveStatsMarkup()}`}
+$('main').innerHTML=(page==='exam'?h:`<div class="toolbar"><span class="tiny muted"></span></div>`+h);if(admin&&['admin','students','analytics'].includes(page))esRefreshLiveStats();applyPageLanguage();requestAnimationFrame(()=>{const a=document.querySelector('.online-test-omr');if(a)a.scrollTop=esOnlineOmrSavedScroll;const b=document.querySelector('.omr-sidebar');if(b)b.scrollTop=esDemoOmrSavedScroll;const c=document.querySelector('.es-solution-omr');if(c)c.scrollTop=esSolutionOmrScroll;})}
 
 const uiTranslations={
 'Home':'होम','Exams':'परीक्षाएँ','History':'इतिहास','Notes':'नोट्स','Rank':'रैंक','Profile':'प्रोफाइल',
