@@ -2214,7 +2214,7 @@ html.es-android-app body.dark .es-solution-review>.card,html.es-android-app body
 <script id="es-android-premium-bootstrap">
 (function(){
  const ua=navigator.userAgent||'';
- const isApp=/Android/i.test(ua)&&(/; wv\)/i.test(ua)||/\bwv\b/i.test(ua)||/ExamSetuApp/i.test(ua)||!!window.ExamSetuAndroid);
+ const isApp=!!window.ExamSetuAndroid || (/Android/i.test(ua) && ((/; wv\)/i.test(ua)||/\bwv\b/i.test(ua)||/ExamSetuApp/i.test(ua)) || window.matchMedia('(max-width: 700px)').matches));
  if(!isApp)return;
  document.documentElement.classList.add('es-android-app');
  document.addEventListener('DOMContentLoaded',()=>{
