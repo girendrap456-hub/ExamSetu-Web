@@ -2176,32 +2176,32 @@ function esToggleSearch(){
 <style id="es-android-premium-final">
 /* Premium UI only in Android WebView. Desktop and regular web browser unchanged. */
 .es-premium-number-strip{display:none}
-html.es-android-app body:has(.es-solution-review){background:#f4f8ff!important}
-html.es-android-app .es-solution-shell{display:flex!important;flex-direction:column!important;gap:0!important;width:100%!important;min-width:0!important}
-html.es-android-app .es-solution-shell .es-solution-omr,html.es-android-app .es-solution-shell .es-sol-open{display:none!important}
-html.es-android-app .es-premium-number-strip{display:flex;align-items:center;gap:5px;position:sticky;top:0;z-index:8;width:100%;background:#fff;padding:9px 4px;border-bottom:1px solid #dbe6f5;min-width:0}
-html.es-android-app .es-premium-number-list{display:flex;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;gap:8px;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding:3px}
-html.es-android-app .es-premium-number-list::-webkit-scrollbar{display:none}
-html.es-android-app .es-premium-number-list .es-sol-number{flex:0 0 46px!important;width:46px!important;height:46px!important;min-width:46px!important;border-radius:11px!important;color:white!important;font-weight:800!important;font-size:15px!important;scroll-snap-align:center}
-html.es-android-app .es-premium-number-list .es-sol-right{background:#119650!important;border:1px solid #119650!important}
-html.es-android-app .es-premium-number-list .es-sol-wrong{background:#f04452!important;border:1px solid #f04452!important}
-html.es-android-app .es-premium-number-list .es-sol-skip{background:#aeb6c3!important;border:1px solid #aeb6c3!important}
-html.es-android-app .es-premium-number-list .es-sol-current{outline:3px solid #1668d5!important;outline-offset:2px!important;box-shadow:0 0 0 5px #dcecff!important}
-html.es-android-app .es-strip-arrow{flex:0 0 22px;border:0;background:transparent;color:#234b79;font-size:30px;line-height:1;cursor:pointer}
-html.es-android-app .es-solution-shell .es-solution-review{width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;padding:10px 10px 100px!important;overflow:visible!important;background:#f4f8ff!important}
-html.es-android-app .es-solution-review>.card{padding:15px!important;background:#fff!important;border-radius:16px!important;border:1px solid #e0e9f5!important;overflow:visible!important;height:auto!important;max-height:none!important;min-height:0!important}
-html.es-android-app .es-solution-review .option{display:block!important;min-height:64px!important;border-radius:12px!important;margin:8px 0!important;padding:15px!important;white-space:normal!important;height:auto!important}
-html.es-android-app .es-solution-review .option.correct{background:#e2f8ea!important;color:#096b36!important;border:1.5px solid #10a052!important}
-html.es-android-app .es-solution-review .option.wrong{background:#ffebec!important;color:#b3232d!important;border:1.5px solid #fa5b67!important}
-html.es-android-app .es-solution-review .es-expanded-solution{display:block!important;position:static!important;height:auto!important;max-height:none!important;overflow:visible!important;margin:18px 0 12px!important;padding:0!important}
-html.es-android-app .es-solution-review .es-expanded-solution h3{color:#0758b4!important;background:#eaf4ff!important;border-radius:12px!important;padding:13px!important;margin:0 0 12px!important;font-size:18px!important}
-html.es-android-app .es-solution-review .es-solution-body{display:block!important;overflow:visible!important;height:auto!important;max-height:none!important;white-space:normal!important;line-height:1.9!important;font-size:16px!important;color:#172d48!important;padding:14px!important;border-radius:12px!important;background:#fff9e9!important;overflow-wrap:anywhere!important}
-html.es-android-app .es-solution-review .es-fixed-review-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;z-index:30!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:7px!important;padding:10px 10px calc(10px + env(safe-area-inset-bottom))!important;background:#f8fbff!important;border-top:1px solid #d9e6f4!important;box-shadow:0 -5px 20px #153b6312!important}
-html.es-android-app .es-solution-review .es-fixed-review-bar .btn{padding:12px 9px!important;font-size:13px!important;min-width:76px!important}
-html.es-android-app .es-solution-review .es-reattempt-label{font-size:11px!important;gap:4px!important;min-width:0!important}
-html.es-android-app .es-solution-review .es-screen-question-status{height:auto!important;max-height:none!important;flex-wrap:wrap!important;padding:10px!important;border-radius:12px!important;background:#fff!important;margin-bottom:10px!important}
-html.es-android-app body.dark .es-solution-review .es-solution-body{background:#233750!important;color:#eef5ff!important}
-html.es-android-app body.dark .es-solution-review>.card,html.es-android-app body.dark .es-premium-number-strip{background:#16243a!important}
+html:is(.es-android-app,.es-mobile-web) body:has(.es-solution-review){background:#f4f8ff!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-shell{display:flex!important;flex-direction:column!important;gap:0!important;width:100%!important;min-width:0!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-shell .es-solution-omr,html:is(.es-android-app,.es-mobile-web) .es-solution-shell .es-sol-open{display:none!important}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-strip{display:flex;align-items:center;gap:5px;position:sticky;top:0;z-index:8;width:100%;background:#fff;padding:9px 4px;border-bottom:1px solid #dbe6f5;min-width:0}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list{display:flex;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;gap:8px;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding:3px}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list::-webkit-scrollbar{display:none}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list .es-sol-number{flex:0 0 46px!important;width:46px!important;height:46px!important;min-width:46px!important;border-radius:11px!important;color:white!important;font-weight:800!important;font-size:15px!important;scroll-snap-align:center}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list .es-sol-right{background:#119650!important;border:1px solid #119650!important}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list .es-sol-wrong{background:#f04452!important;border:1px solid #f04452!important}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list .es-sol-skip{background:#aeb6c3!important;border:1px solid #aeb6c3!important}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list .es-sol-current{outline:3px solid #1668d5!important;outline-offset:2px!important;box-shadow:0 0 0 5px #dcecff!important}
+html:is(.es-android-app,.es-mobile-web) .es-strip-arrow{flex:0 0 22px;border:0;background:transparent;color:#234b79;font-size:30px;line-height:1;cursor:pointer}
+html:is(.es-android-app,.es-mobile-web) .es-solution-shell .es-solution-review{width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;padding:10px 10px 100px!important;overflow:visible!important;background:#f4f8ff!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review>.card{padding:15px!important;background:#fff!important;border-radius:16px!important;border:1px solid #e0e9f5!important;overflow:visible!important;height:auto!important;max-height:none!important;min-height:0!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .option{display:block!important;min-height:64px!important;border-radius:12px!important;margin:8px 0!important;padding:15px!important;white-space:normal!important;height:auto!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .option.correct{background:#e2f8ea!important;color:#096b36!important;border:1.5px solid #10a052!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .option.wrong{background:#ffebec!important;color:#b3232d!important;border:1.5px solid #fa5b67!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .es-expanded-solution{display:block!important;position:static!important;height:auto!important;max-height:none!important;overflow:visible!important;margin:18px 0 12px!important;padding:0!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .es-expanded-solution h3{color:#0758b4!important;background:#eaf4ff!important;border-radius:12px!important;padding:13px!important;margin:0 0 12px!important;font-size:18px!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .es-solution-body{display:block!important;overflow:visible!important;height:auto!important;max-height:none!important;white-space:normal!important;line-height:1.9!important;font-size:16px!important;color:#172d48!important;padding:14px!important;border-radius:12px!important;background:#fff9e9!important;overflow-wrap:anywhere!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .es-fixed-review-bar{position:fixed!important;bottom:0!important;left:0!important;right:0!important;z-index:30!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:7px!important;padding:10px 10px calc(10px + env(safe-area-inset-bottom))!important;background:#f8fbff!important;border-top:1px solid #d9e6f4!important;box-shadow:0 -5px 20px #153b6312!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .es-fixed-review-bar .btn{padding:12px 9px!important;font-size:13px!important;min-width:76px!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .es-reattempt-label{font-size:11px!important;gap:4px!important;min-width:0!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review .es-screen-question-status{height:auto!important;max-height:none!important;flex-wrap:wrap!important;padding:10px!important;border-radius:12px!important;background:#fff!important;margin-bottom:10px!important}
+html:is(.es-android-app,.es-mobile-web) body.dark .es-solution-review .es-solution-body{background:#233750!important;color:#eef5ff!important}
+html:is(.es-android-app,.es-mobile-web) body.dark .es-solution-review>.card,html:is(.es-android-app,.es-mobile-web) body.dark .es-premium-number-strip{background:#16243a!important}
 #es-native-splash{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 34%,#289fe7,#0754a4 62%,#052d6c);color:#fff;text-align:center;transition:opacity .4s}
 #es-native-splash img{width:116px;height:116px;object-fit:contain;background:#fff;border-radius:28px;padding:9px;box-shadow:0 12px 40px #001e4966}
 #es-native-splash strong{font-size:36px;margin-top:16px;letter-spacing:-1px}
@@ -2214,9 +2214,16 @@ html.es-android-app body.dark .es-solution-review>.card,html.es-android-app body
 <script id="es-android-premium-bootstrap">
 (function(){
  const ua=navigator.userAgent||'';
- const isApp=!!window.ExamSetuAndroid || (/Android/i.test(ua) && ((/; wv\)/i.test(ua)||/\bwv\b/i.test(ua)||/ExamSetuApp/i.test(ua)) || window.matchMedia('(max-width: 700px)').matches));
+ // Native app detection is independent of viewport width.
+ const android=/Android/i.test(ua);
+ const bridge=typeof window.ExamSetuAndroid!=='undefined' && window.ExamSetuAndroid!==null;
+ const appUA=/ExamSetuApp/i.test(ua);
+ const webviewUA=android && (/(?:;\s*wv\)|\bwv\b)/i.test(ua));
+ const isApp=bridge || (android && (appUA || webviewUA));
+ const isMobileWeb=!isApp && window.matchMedia && window.matchMedia('(max-width: 700px)').matches;
+ document.documentElement.classList.toggle('es-android-app',Boolean(isApp));
+ document.documentElement.classList.toggle('es-mobile-web',Boolean(isMobileWeb));
  if(!isApp)return;
- document.documentElement.classList.add('es-android-app');
  document.addEventListener('DOMContentLoaded',()=>{
   if(!sessionStorage.getItem('esPremiumSplashSeen')){
    sessionStorage.setItem('esPremiumSplashSeen','1');
@@ -2236,64 +2243,87 @@ html.es-android-app body.dark .es-solution-review>.card,html.es-android-app body
 
 <style id="es-all-screens-premium-2026">
 /* Android WebView only: desktop website is untouched. */
-html.es-android-app{--esblue:#0759b7;--esnavy:#073e83;--esline:#dce8f6;--espale:#f4f8ff}
-html.es-android-app body:not(.dark){background:#f4f8ff;color:#122b4a}
-html.es-android-app .app{background:#f4f8ff;min-height:100dvh}
-html.es-android-app header{background:linear-gradient(112deg,#063d83,#0874cc)!important;box-shadow:0 4px 16px #06438125;min-height:68px;padding:8px 12px!important}
-html.es-android-app header .logo{border-radius:13px!important;background:#fff;box-shadow:0 2px 10px #002c5340}
-html.es-android-app header .brand b{letter-spacing:-.5px}
-html.es-android-app .layout{display:block!important}
-html.es-android-app nav#nav{display:none!important}
-html.es-android-app main#main{max-width:100%!important;padding:12px 12px 92px!important;margin:0!important;min-height:calc(100dvh - 72px)!important}
-html.es-android-app .card,html.es-android-app .auth-card{border:1px solid #e1eaf6!important;background:#fff;border-radius:18px!important;box-shadow:0 5px 20px #183e6910;margin-bottom:12px}
-html.es-android-app .hero{background:linear-gradient(115deg,#e2f0ff,#fff5df)!important;border:1px solid #e0ebfa;border-radius:20px!important}
-html.es-android-app .btn:not(.alt){background:linear-gradient(100deg,#0750ad,#0874d6)!important;border-radius:12px!important;box-shadow:0 3px 9px #0755ae18}
-html.es-android-app .btn.alt,html.es-android-app .back{background:#e8f2ff!important;color:#084e9b!important;border-radius:12px!important}
-html.es-android-app .stat{border:1px solid #e2eafa;border-radius:15px;background:#eff5ff}
-html.es-android-app .stat:nth-child(4n+2){background:#e7f8f0}
-html.es-android-app .stat:nth-child(4n+3){background:#fff5e1}
-html.es-android-app .stat:nth-child(4n+4){background:#fff0ef}
-html.es-android-app .grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
-html.es-android-app h1{font-size:22px!important;color:#092d58}
-html.es-android-app h2{color:#113f78}
-html.es-android-app .option{border:1px solid #cfdff1!important;border-radius:13px!important;background:#fff;padding:14px!important;min-height:58px}
-html.es-android-app .option.selected{background:#e9f3ff!important;border:2px solid #0867c7!important}
-html.es-android-app .option.correct{background:#e0f9e9!important;border:2px solid #15a357!important}
-html.es-android-app .option.wrong{background:#ffe8e8!important;border:2px solid #ed4747!important}
-html.es-android-app .field input,html.es-android-app .field select,html.es-android-app .field textarea{background:#f9fbff;border:1px solid #cfdff0;border-radius:12px;min-height:47px}
-html.es-android-app .auth-screen main#main{padding-top:20px!important}
-html.es-android-app .auth-card{padding:22px 17px!important;max-width:450px;margin:0 auto 14px!important}
-html.es-android-app .auth-card .btn{width:100%;margin:6px 0}
-html.es-android-app .exam-list-card{border:1px solid #dfebf9!important;border-radius:17px!important;padding:14px!important;box-shadow:0 4px 14px #143b6510}
-html.es-android-app .instruction-page{background:#fff;border:1px solid #dce8f5;border-radius:18px;padding:17px}
-html.es-android-app .instruction-page li{padding:6px 0;line-height:1.55}
-html.es-android-app .instruction-stats{display:flex;flex-wrap:wrap;gap:9px}
-html.es-android-app .instruction-stats b{background:#e8f3ff;border-radius:12px;padding:10px;color:#064d98}
-html.es-android-app .profiletop{border-radius:16px;background:#eaf4ff!important}
-html.es-android-app .exam-screen main#main{padding-bottom:105px!important}
-html.es-android-app .es-solution-review main#main{padding-bottom:110px!important}
-html.es-android-app .es-premium-number-strip{border-radius:12px!important;position:sticky;top:65px;z-index:8}
-html.es-android-app .es-premium-number-list{scrollbar-width:none;overscroll-behavior-x:contain}
-html.es-android-app .es-premium-number-list::-webkit-scrollbar{display:none}
-html.es-android-app .es-fixed-review-bar{z-index:30!important}
-html.es-android-app .es-bottom-tabs{position:fixed;bottom:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-around;gap:2px;padding:7px 5px calc(7px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #dce8f5;box-shadow:0 -5px 20px #153b6310}
-html.es-android-app .es-bottom-tabs button{border:0;background:transparent;color:#637c99;min-width:0;flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:600 10px system-ui;cursor:pointer;padding:4px 2px}
-html.es-android-app .es-bottom-tabs button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-html.es-android-app .es-bottom-tabs button.active{color:#075cc4}
-html.es-android-app .es-bottom-tabs button.active svg{stroke-width:2.5}
-html.es-android-app body.dark .es-bottom-tabs{background:#16243a;border-color:#304965}
-html.es-android-app body.dark .es-bottom-tabs button{color:#b0c3dc}
-html.es-android-app body.dark .es-bottom-tabs button.active{color:#77b6ff}
-html.es-android-app body.dark h1,html.es-android-app body.dark h2{color:#e9f3ff}
-html.es-android-app body.dark .instruction-page{background:#16243a;border-color:#304965}
-html.es-android-app body.dark .app{background:#111b2a}
-html.es-android-app body.dark .card,html.es-android-app body.dark .auth-card{background:#16243a!important;border-color:#304965!important}
-html.es-android-app body.dark .option{background:#203550!important;color:#edf5ff}
-@media(min-width:701px){html.es-android-app main#main{max-width:600px!important;margin:auto!important}}
+html:is(.es-android-app,.es-mobile-web){--esblue:#0759b7;--esnavy:#073e83;--esline:#dce8f6;--espale:#f4f8ff}
+html:is(.es-android-app,.es-mobile-web) body:not(.dark){background:#f4f8ff;color:#122b4a}
+html:is(.es-android-app,.es-mobile-web) .app{background:#f4f8ff;min-height:100dvh}
+html:is(.es-android-app,.es-mobile-web) header{background:linear-gradient(112deg,#063d83,#0874cc)!important;box-shadow:0 4px 16px #06438125;min-height:68px;padding:8px 12px!important}
+html:is(.es-android-app,.es-mobile-web) header .logo{border-radius:13px!important;background:#fff;box-shadow:0 2px 10px #002c5340}
+html:is(.es-android-app,.es-mobile-web) header .brand b{letter-spacing:-.5px}
+html:is(.es-android-app,.es-mobile-web) .layout{display:block!important}
+html:is(.es-android-app,.es-mobile-web) nav#nav{display:none!important}
+html:is(.es-android-app,.es-mobile-web) main#main{max-width:100%!important;padding:12px 12px 92px!important;margin:0!important;min-height:calc(100dvh - 72px)!important}
+html:is(.es-android-app,.es-mobile-web) .card,html:is(.es-android-app,.es-mobile-web) .auth-card{border:1px solid #e1eaf6!important;background:#fff;border-radius:18px!important;box-shadow:0 5px 20px #183e6910;margin-bottom:12px}
+html:is(.es-android-app,.es-mobile-web) .hero{background:linear-gradient(115deg,#e2f0ff,#fff5df)!important;border:1px solid #e0ebfa;border-radius:20px!important}
+html:is(.es-android-app,.es-mobile-web) .btn:not(.alt){background:linear-gradient(100deg,#0750ad,#0874d6)!important;border-radius:12px!important;box-shadow:0 3px 9px #0755ae18}
+html:is(.es-android-app,.es-mobile-web) .btn.alt,html:is(.es-android-app,.es-mobile-web) .back{background:#e8f2ff!important;color:#084e9b!important;border-radius:12px!important}
+html:is(.es-android-app,.es-mobile-web) .stat{border:1px solid #e2eafa;border-radius:15px;background:#eff5ff}
+html:is(.es-android-app,.es-mobile-web) .stat:nth-child(4n+2){background:#e7f8f0}
+html:is(.es-android-app,.es-mobile-web) .stat:nth-child(4n+3){background:#fff5e1}
+html:is(.es-android-app,.es-mobile-web) .stat:nth-child(4n+4){background:#fff0ef}
+html:is(.es-android-app,.es-mobile-web) .grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+html:is(.es-android-app,.es-mobile-web) h1{font-size:22px!important;color:#092d58}
+html:is(.es-android-app,.es-mobile-web) h2{color:#113f78}
+html:is(.es-android-app,.es-mobile-web) .option{border:1px solid #cfdff1!important;border-radius:13px!important;background:#fff;padding:14px!important;min-height:58px}
+html:is(.es-android-app,.es-mobile-web) .option.selected{background:#e9f3ff!important;border:2px solid #0867c7!important}
+html:is(.es-android-app,.es-mobile-web) .option.correct{background:#e0f9e9!important;border:2px solid #15a357!important}
+html:is(.es-android-app,.es-mobile-web) .option.wrong{background:#ffe8e8!important;border:2px solid #ed4747!important}
+html:is(.es-android-app,.es-mobile-web) .field input,html:is(.es-android-app,.es-mobile-web) .field select,html:is(.es-android-app,.es-mobile-web) .field textarea{background:#f9fbff;border:1px solid #cfdff0;border-radius:12px;min-height:47px}
+html:is(.es-android-app,.es-mobile-web) .auth-screen main#main{padding-top:20px!important}
+html:is(.es-android-app,.es-mobile-web) .auth-card{padding:22px 17px!important;max-width:450px;margin:0 auto 14px!important}
+html:is(.es-android-app,.es-mobile-web) .auth-card .btn{width:100%;margin:6px 0}
+html:is(.es-android-app,.es-mobile-web) .exam-list-card{border:1px solid #dfebf9!important;border-radius:17px!important;padding:14px!important;box-shadow:0 4px 14px #143b6510}
+html:is(.es-android-app,.es-mobile-web) .instruction-page{background:#fff;border:1px solid #dce8f5;border-radius:18px;padding:17px}
+html:is(.es-android-app,.es-mobile-web) .instruction-page li{padding:6px 0;line-height:1.55}
+html:is(.es-android-app,.es-mobile-web) .instruction-stats{display:flex;flex-wrap:wrap;gap:9px}
+html:is(.es-android-app,.es-mobile-web) .instruction-stats b{background:#e8f3ff;border-radius:12px;padding:10px;color:#064d98}
+html:is(.es-android-app,.es-mobile-web) .profiletop{border-radius:16px;background:#eaf4ff!important}
+html:is(.es-android-app,.es-mobile-web) .exam-screen main#main{padding-bottom:105px!important}
+html:is(.es-android-app,.es-mobile-web) .es-solution-review main#main{padding-bottom:110px!important}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-strip{border-radius:12px!important;position:sticky;top:65px;z-index:8}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list{scrollbar-width:none;overscroll-behavior-x:contain}
+html:is(.es-android-app,.es-mobile-web) .es-premium-number-list::-webkit-scrollbar{display:none}
+html:is(.es-android-app,.es-mobile-web) .es-fixed-review-bar{z-index:30!important}
+html:is(.es-android-app,.es-mobile-web) .es-bottom-tabs{position:fixed;bottom:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-around;gap:2px;padding:7px 5px calc(7px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #dce8f5;box-shadow:0 -5px 20px #153b6310}
+html:is(.es-android-app,.es-mobile-web) .es-bottom-tabs button{border:0;background:transparent;color:#637c99;min-width:0;flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:600 10px system-ui;cursor:pointer;padding:4px 2px}
+html:is(.es-android-app,.es-mobile-web) .es-bottom-tabs button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+html:is(.es-android-app,.es-mobile-web) .es-bottom-tabs button.active{color:#075cc4}
+html:is(.es-android-app,.es-mobile-web) .es-bottom-tabs button.active svg{stroke-width:2.5}
+html:is(.es-android-app,.es-mobile-web) body.dark .es-bottom-tabs{background:#16243a;border-color:#304965}
+html:is(.es-android-app,.es-mobile-web) body.dark .es-bottom-tabs button{color:#b0c3dc}
+html:is(.es-android-app,.es-mobile-web) body.dark .es-bottom-tabs button.active{color:#77b6ff}
+html:is(.es-android-app,.es-mobile-web) body.dark h1,html:is(.es-android-app,.es-mobile-web) body.dark h2{color:#e9f3ff}
+html:is(.es-android-app,.es-mobile-web) body.dark .instruction-page{background:#16243a;border-color:#304965}
+html:is(.es-android-app,.es-mobile-web) body.dark .app{background:#111b2a}
+html:is(.es-android-app,.es-mobile-web) body.dark .card,html:is(.es-android-app,.es-mobile-web) body.dark .auth-card{background:#16243a!important;border-color:#304965!important}
+html:is(.es-android-app,.es-mobile-web) body.dark .option{background:#203550!important;color:#edf5ff}
+@media(min-width:701px){html:is(.es-android-app,.es-mobile-web) main#main{max-width:600px!important;margin:auto!important}}
+</style>
+<style id="es-unified-mobile-premium-2026">
+/* ExamSetu 2026: unified mobile premium presentation; desktop layout untouched */
+@media(max-width:700px){
+ html:is(.es-android-app,.es-mobile-web) body{background:#f3f6fc!important}
+ html:is(.es-android-app,.es-mobile-web) .app{background:#f3f6fc!important;min-height:100dvh}
+ html:is(.es-android-app,.es-mobile-web) header{background:linear-gradient(125deg,#082c61,#146bc3)!important;box-shadow:0 3px 15px #092e5b22!important}
+ html:is(.es-android-app,.es-mobile-web) main#main{padding:14px 13px 95px!important;max-width:600px!important;margin:0 auto!important}
+ html:is(.es-android-app,.es-mobile-web) .es-premium-banner{min-height:0!important;height:auto!important;overflow:hidden!important;border-radius:22px!important;background:linear-gradient(125deg,#103b7b,#197bd0)!important;box-shadow:0 10px 25px #14529c2a!important;margin:6px 0 16px!important}
+ html:is(.es-android-app,.es-mobile-web) .es-premium-boy-art{opacity:.14!important;filter:saturate(.8)!important}
+ html:is(.es-android-app,.es-mobile-web) .es-premium-banner:after{display:none!important}
+ html:is(.es-android-app,.es-mobile-web) .es-premium-content{padding:20px 17px!important;max-width:100%!important;position:relative!important;z-index:1!important;color:white!important}
+ html:is(.es-android-app,.es-mobile-web) .es-premium-content :is(h1,h2,h3,p,.es-premium-welcome,.es-premium-name){color:white!important}
+ html:is(.es-android-app,.es-mobile-web) .es-premium-home .card,
+ html:is(.es-android-app,.es-mobile-web) .exam-list-card,
+ html:is(.es-android-app,.es-mobile-web) .es-dashboard .card{border:1px solid #e0e9f7!important;border-radius:17px!important;box-shadow:0 5px 16px #153b7010!important;background:white!important}
+ html:is(.es-android-app,.es-mobile-web) .exam-list-card{padding:13px 14px!important;margin:8px 0!important}
+ html:is(.es-android-app,.es-mobile-web) .exam-list-card h2{font-size:16px!important;line-height:1.35!important}
+ html:is(.es-android-app,.es-mobile-web) .es-bottom-tabs{box-shadow:0 -4px 18px #153d6c16!important}
+ html:is(.es-android-app,.es-mobile-web) .hero{border-radius:17px!important}
+ html:is(.es-android-app,.es-mobile-web) .toolbar{margin-bottom:8px!important}
+ html:is(.es-android-app,.es-mobile-web) .grid{gap:10px!important}
+}
 </style>
 <script id="es-all-screens-premium-nav">
 (function(){
-if(!document.documentElement.classList.contains('es-android-app'))return;
+if(!document.documentElement.matches('.es-android-app, .es-mobile-web'))return;
 const icons={home:'<path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/>',exams:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6M9 10h6M9 14h6"/>',results:'<path d="M4 20V10m6 10V5m6 15v-8m5 8H3"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>'};
 const items=[['home','Home','home'],['tests','Exams','exams'],['online-result','Results','results'],['profile','Profile','profile']];
 function update(){
