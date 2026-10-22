@@ -1081,11 +1081,12 @@ const SUPABASE_URL='https://ellxfxpkhdnlgovpnjku.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_cZxEE4SOImEex2QrE_VvkQ_Z3_vZFE_';
 const sb=window.supabase?.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 let demoAccount=null,loggedIn=false,authError='',loginEmail='',currentUser=null;
+let pendingVerificationEmail='';
 async function initOnlineAuth(){
  if(!sb){authError='Supabase SDK लोड नहीं हुआ। इंटरनेट जाँचें।';render();return}
  try{const {data:{session},error}=await sb.auth.getSession();if(error)throw error;
   if(session?.user){await applyOnlineUser(session.user);page='home'}else page='login';
-  sb.auth.onAuthStateChange((_event,session)=>{if(!session?.user){currentUser=null;loggedIn=false;admin=false;if(page!=='signup'&&page!=='forgot')page='login';render()}});
+  sb.auth.onAuthStateChange((_event,session)=>{if(!session?.user){currentUser=null;loggedIn=false;admin=false;if(page!=='signup'&&page!=='forgot'&&page!=='verify-email')page='login';render()}});
  }catch(e){authError=e.message||'Login connection failed';page='login'}render();
 }
 async function applyOnlineUser(user){currentUser=user;loggedIn=true;loginEmail=user.email||'';
@@ -1103,9 +1104,30 @@ async function registerDemo(){
  const confirm=document.getElementById('signupConfirm')?.value||'';
  if(!name||!/^\S+@\S+\.\S+$/.test(email)||pw.length<8||pw!==confirm){authError='नाम, सही Email और समान Password (कम से कम 8 अक्षर) डालें।';render();return}
  if(!sb){authError='Internet / Supabase SDK उपलब्ध नहीं है';render();return}
- try{const {data,error}=await sb.auth.signUp({email,password:pw,options:{data:{full_name:name}}});if(error)throw error;
-  authError='Signup request भेजी गई। यदि नया Account है तो Email में Confirmation Link खोलें, फिर Login करें।';loginEmail=email;page='login';render();
+ try{
+  const {data,error}=await sb.auth.signUp({email,password:pw,options:{data:{full_name:name}}});if(error)throw error;
+  pendingVerificationEmail=email;loginEmail=email;authError='';
+  if(data?.session?.user){await applyOnlineUser(data.user);go('home');return}
+  page='verify-email';render();
  }catch(e){authError=e.message||'Signup failed';render()}
+}
+async function verifySignupOtp(){
+ const email=pendingVerificationEmail||loginEmail;
+ const token=(document.getElementById('signupOtp')?.value||'').trim();
+ if(!email||!/^\d{6}$/.test(token)){authError='कृपया 6 अंकों का OTP डालें।';render();return}
+ try{
+  const {data,error}=await sb.auth.verifyOtp({email,token,type:'signup'});if(error)throw error;
+  authError='';pendingVerificationEmail='';
+  if(data?.user&&data?.session){await applyOnlineUser(data.user);go('home')}
+  else{authError='Email Verify हो गया। अब Password से Login करें।';page='login';render()}
+ }catch(e){authError=e.message||'OTP verification failed';render()}
+}
+async function resendSignupOtp(){
+ const email=pendingVerificationEmail||loginEmail;
+ if(!email){authError='पहले Registration करें।';page='signup';render();return}
+ try{const {error}=await sb.auth.resend({type:'signup',email});if(error)throw error;
+  authError='नया OTP भेजने का अनुरोध सफल हुआ। Gmail Inbox और Spam देखें।';render();
+ }catch(e){authError=e.message||'OTP भेजने में समस्या आई';render()}
 }
 async function loginDemo(){
  const email=document.getElementById('loginEmail')?.value.trim().toLowerCase()||'';
@@ -1548,14 +1570,14 @@ document.addEventListener('keydown',e=>{
 });
 try{if(localStorage.getItem('examsetu_dark_mode')==='1')document.body.classList.add('dark')}catch(e){}
 function toggleDark(){const dark=document.body.classList.toggle('dark');try{localStorage.setItem('examsetu_dark_mode',dark?'1':'0')}catch(e){};render()}
-function go(p){if(p==='online-attempt'&&onlinePaused)p='home';if(!loggedIn&&!admin&&!['signup','login','forgot','admin-login','admin'].includes(p))p='login';if(page==='exam'&&p!=='exam'&&p!=='review'&&mode==='test'&&timer){stopClock()}if(p!==page)stack.push(page);page=p;render();window.scrollTo(0,0);if(p==='tests')filterSeries(window.examSearchTerm||'')}
+function go(p){if(p==='online-attempt'&&onlinePaused)p='home';if(!loggedIn&&!admin&&!['signup','login','forgot','verify-email','admin-login','admin'].includes(p))p='login';if(page==='exam'&&p!=='exam'&&p!=='review'&&mode==='test'&&timer){stopClock()}if(p!==page)stack.push(page);page=p;render();window.scrollTo(0,0);if(p==='tests')filterSeries(window.examSearchTerm||'')}
 function back(){
  // Practice/Solution is read-only review: exit silently, without an unsaved-answers warning.
  if(page==='exam'&&mode==='practice'){exitPractice();return;}
  // Never leave an active online exam using Back; pause or submit it first.
  if(page==='online-attempt'&&onlineAttempt&&!onlinePaused)return;
  if(page==='exam'&&mode==='test')return;
- if(['signup','login','forgot'].includes(page))return;
+ if(['signup','login','forgot','verify-email'].includes(page))return;
  // Folder view is a subpage of the exam list, not Home.
  if((page==='tests'||page==='online-exams')&&onlineSeriesSelected!==null){
    onlineSeriesSelected=null;render();window.scrollTo(0,0);return;
@@ -1691,7 +1713,7 @@ function esSubmittedHistoryHtml(){
  });
  return `<h1>📊 मेरे दिए हुए Exams के Results</h1>${rows.length?rows.join(''):'<div class="card"><p>अभी कोई Submitted Online Exam नहीं मिला।</p></div>'}`;
 }
-function navHtml(){if(!admin||['signup','login','forgot','admin-login'].includes(page)){$('nav').innerHTML='';return;}let links=admin?[['admin','📊 Admin'],['add','➕ Add Exam'],['students','👥 Students'],['import','📥 Import'],['analytics','📈 Analytics'],['home','🏠 Student']]:[['home','🏠 Home'],['tests','📝 Exams'],['history','📜 History'],['notes','📚 Notes'],['rank','🏆 Rank']];$('nav').innerHTML=(page!=='home'&&page!=='exam'?'<button class="nav-back" title="Back" aria-label="Back" onclick="back()"><svg class="es-back-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg></button>':'')+links.map(([p,t])=>`<button class="${page===p?'active':''}" onclick="${p==='home'&&admin?"admin=false;":''}go('${p}')">${t}</button>`).join('')+(admin?'<button class="admin-logout" onclick="adminLogout()">⏻ Admin Logout</button>':'')}
+function navHtml(){if(!admin||['signup','login','forgot','verify-email','admin-login'].includes(page)){$('nav').innerHTML='';return;}let links=admin?[['admin','📊 Admin'],['add','➕ Add Exam'],['students','👥 Students'],['import','📥 Import'],['analytics','📈 Analytics'],['home','🏠 Student']]:[['home','🏠 Home'],['tests','📝 Exams'],['history','📜 History'],['notes','📚 Notes'],['rank','🏆 Rank']];$('nav').innerHTML=(page!=='home'&&page!=='exam'?'<button class="nav-back" title="Back" aria-label="Back" onclick="back()"><svg class="es-back-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg></button>':'')+links.map(([p,t])=>`<button class="${page===p?'active':''}" onclick="${p==='home'&&admin?"admin=false;":''}go('${p}')">${t}</button>`).join('')+(admin?'<button class="admin-logout" onclick="adminLogout()">⏻ Admin Logout</button>':'')}
 
 const esDate=(v)=>{if(!v)return 'तारीख उपलब्ध नहीं';const d=new Date(v);return Number.isNaN(d.getTime())?'तारीख उपलब्ध नहीं':d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});};
 const esPct=(a,b)=>b>0?Math.round(a/b*100):0;
@@ -1955,8 +1977,9 @@ async function esHeartbeat(){
 }
 setInterval(()=>{esHeartbeat();if(admin&&['admin','students','analytics'].includes(page))esRefreshLiveStats()},30000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){esHeartbeat();if(admin&&['admin','students','analytics'].includes(page))esRefreshLiveStats()}});
-function render(){const __esNumberList=document.querySelector('.es-premium-number-list');if(__esNumberList)window.__esSolutionNumberScroll=__esNumberList.scrollLeft;const __esSolutionScroll=document.querySelector('.es-solution-omr')?.scrollTop;if(__esSolutionScroll!==undefined)esSolutionOmrScroll=__esSolutionScroll;const __esOMRScroll=document.querySelector('.online-test-omr')?.scrollTop;if(__esOMRScroll!==undefined)esOnlineOmrSavedScroll=__esOMRScroll;const __esDemoScroll=document.querySelector('.omr-sidebar')?.scrollTop;if(__esDemoScroll!==undefined)esDemoOmrSavedScroll=__esDemoScroll;window.examSetuExamActive=((page==='exam'&&mode==='test')||page==='online-attempt');document.body.classList.toggle('home-nav-visible',loggedIn&&!admin);document.body.classList.toggle('home-menu-visible',page==='home'&&loggedIn&&!admin);document.body.classList.toggle('admin-mode',admin);document.body.classList.toggle('show-inline-back',loggedIn&&!admin&&!['home','exam','signup','login','forgot'].includes(page));document.body.classList.toggle('auth-screen',['signup','login','forgot','admin-login'].includes(page));document.body.classList.toggle('exam-screen',page==='exam'||page==='online-attempt');document.body.classList.toggle('online-exam-screen',page==='online-attempt');document.body.classList.toggle('es-inner-nav',loggedIn&&!admin&&page!=='home'&&page!=='tests'&&page!=='online-exams');document.body.classList.toggle('es-result-clean',['my-results','online-result','online-solution'].includes(page));document.body.classList.toggle('practice-screen',page==='exam'&&mode==='practice');navHtml();const headerAvatar=$('header-student-avatar');if(headerAvatar)headerAvatar.innerHTML=esAvatarHtml(studentAvatar());const esNameEl=$('es-header-name');if(esNameEl)esNameEl.textContent=(loggedIn&&!admin)?(esStudentName()==='Student'?'':esStudentName()):'';esPositionHeaderControls();let h='',backbtn='' ,languagebtn=`<label class="exam-language-select" title="Question language">🌐 <select aria-label="Question language" onchange="${page==='online-solution'?'esPracticeLanguage':page==='online-attempt'?'onlineSetLanguage':'setQuestionLanguage'}(this.value)"><option value="hi" ${(page==='online-solution'?esPracticeLang:page==='online-attempt'?onlineLang:lang)==='hi'?'selected':''}>हिन्दी</option><option value="en" ${(page==='online-solution'?esPracticeLang:page==='online-attempt'?onlineLang:lang)==='en'?'selected':''}>English</option></select></label>`;
+function render(){const __esNumberList=document.querySelector('.es-premium-number-list');if(__esNumberList)window.__esSolutionNumberScroll=__esNumberList.scrollLeft;const __esSolutionScroll=document.querySelector('.es-solution-omr')?.scrollTop;if(__esSolutionScroll!==undefined)esSolutionOmrScroll=__esSolutionScroll;const __esOMRScroll=document.querySelector('.online-test-omr')?.scrollTop;if(__esOMRScroll!==undefined)esOnlineOmrSavedScroll=__esOMRScroll;const __esDemoScroll=document.querySelector('.omr-sidebar')?.scrollTop;if(__esDemoScroll!==undefined)esDemoOmrSavedScroll=__esDemoScroll;window.examSetuExamActive=((page==='exam'&&mode==='test')||page==='online-attempt');document.body.classList.toggle('home-nav-visible',loggedIn&&!admin);document.body.classList.toggle('home-menu-visible',page==='home'&&loggedIn&&!admin);document.body.classList.toggle('admin-mode',admin);document.body.classList.toggle('show-inline-back',loggedIn&&!admin&&!['home','exam','signup','login','forgot'].includes(page));document.body.classList.toggle('auth-screen',['signup','login','forgot','verify-email','admin-login'].includes(page));document.body.classList.toggle('exam-screen',page==='exam'||page==='online-attempt');document.body.classList.toggle('online-exam-screen',page==='online-attempt');document.body.classList.toggle('es-inner-nav',loggedIn&&!admin&&page!=='home'&&page!=='tests'&&page!=='online-exams');document.body.classList.toggle('es-result-clean',['my-results','online-result','online-solution'].includes(page));document.body.classList.toggle('practice-screen',page==='exam'&&mode==='practice');navHtml();const headerAvatar=$('header-student-avatar');if(headerAvatar)headerAvatar.innerHTML=esAvatarHtml(studentAvatar());const esNameEl=$('es-header-name');if(esNameEl)esNameEl.textContent=(loggedIn&&!admin)?(esStudentName()==='Student'?'':esStudentName()):'';esPositionHeaderControls();let h='',backbtn='' ,languagebtn=`<label class="exam-language-select" title="Question language">🌐 <select aria-label="Question language" onchange="${page==='online-solution'?'esPracticeLanguage':page==='online-attempt'?'onlineSetLanguage':'setQuestionLanguage'}(this.value)"><option value="hi" ${(page==='online-solution'?esPracticeLang:page==='online-attempt'?onlineLang:lang)==='hi'?'selected':''}>हिन्दी</option><option value="en" ${(page==='online-solution'?esPracticeLang:page==='online-attempt'?onlineLang:lang)==='en'?'selected':''}>English</option></select></label>`;
 if(page==='signup'){h=`<div class="auth-card"><h1>👤 Create Student Account</h1><p class="muted">पहली बार Account बनाएँ, फिर Email और Password से Login करें।</p><label class="field">Student Name<input id="signupName" autocomplete="name" placeholder="पूरा नाम"></label><label class="field">Email<input id="signupEmail" type="email" autocomplete="username" placeholder="example@gmail.com"></label><label class="field">Password<input id="signupPassword" type="password" autocomplete="new-password" placeholder="कम से कम 8 अक्षर"></label><label class="field">Confirm Password<input id="signupConfirm" type="password" autocomplete="new-password"></label>${authError?`<p class="danger">${esc(authError)}</p>`:''}<button class="btn" onclick="registerDemo()">Create Account →</button> <button class="btn alt" onclick="authError='';go('login')">Already registered? Login</button><p class="tiny muted">Supabase Online Account • Email Confirmation आवश्यक है।</p></div>`}
+else if(page==='verify-email'){h=`<div class="auth-card"><h1>✉️ Gmail OTP Verification</h1><p>हमने <b>${esc(pendingVerificationEmail||loginEmail)}</b> पर 6 अंकों का OTP भेजने का अनुरोध किया है। Inbox और Spam जाँचें।</p><label class="field">6-digit OTP<input id="signupOtp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456"></label>${authError?`<p class="muted">${esc(authError)}</p>`:''}<button class="btn" onclick="verifySignupOtp()">Verify Email →</button> <button class="btn alt" onclick="resendSignupOtp()">Resend OTP</button><p><button class="back" onclick="authError='';go('login')">← Login</button></p><p class="tiny muted">OTP कभी किसी के साथ शेयर न करें।</p></div>`}
 else if(page==='login'){h=`<div class="auth-card"><h1>🔐 Student Login</h1><p class="muted"></p><label class="field">Email<input id="loginEmail" type="email" autocomplete="username" value="${esc(loginEmail)}" placeholder="Registered Email"></label><label class="field">Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password"></label>${authError?`<p class="danger">${esc(authError)}</p>`:''}<button class="btn" onclick="loginDemo()">Login to ExamSetu →</button> <button class="btn alt" onclick="authError='';go('signup')">Create Account</button><p><button class="back" onclick="go('forgot')">Forgot Password?</button></p></div>`}
 else if(page==='forgot'){h=`<div class="auth-card"><h1>Reset Password</h1><p>Supabase से Password Reset Link भेजें। <button class="btn" onclick="sendPasswordReset()">Send Reset Email</button></p><button class="btn alt" onclick="go('login')">← Login</button></div>`}
 else if(page==='home'){h=esHomeHtml()}
@@ -2463,7 +2486,7 @@ function esShowCelebration(){const el=document.getElementById('es-celebration-la
 <script id="es-global-processing-hooks">
 /* Visible loading for user-initiated network operations; background heartbeats and autosaves stay silent. */
 (function(){
- const names=['initOnlineAuth','registerDemo','loginDemo','logoutDemo','openAdminOnline','sendPasswordReset','loadOnlineExams','esLoadFinalResult','showOnlineExamQuestions','esOpenSubmittedAnalysis','esOpenSubmittedSolution','onlineStartAttempt','onlinePauseResume','esChangeDisplayName','esFetchRealLeaderboard','esLoadReviewTranslations','esRefreshLiveStats','selectExamFile','importExamNow','replaceExamQuestions','loadOnlinePaidAdmin','saveOnlineExamEditor','saveOnlinePaidExam','loadAdminOnlineExams','deleteOnlineExam','setOnlineExamPublished','saveOnlineExamCutoff'];
+ const names=['initOnlineAuth','registerDemo','verifySignupOtp','resendSignupOtp','loginDemo','logoutDemo','openAdminOnline','sendPasswordReset','loadOnlineExams','esLoadFinalResult','showOnlineExamQuestions','esOpenSubmittedAnalysis','esOpenSubmittedSolution','onlineStartAttempt','onlinePauseResume','esChangeDisplayName','esFetchRealLeaderboard','esLoadReviewTranslations','esRefreshLiveStats','selectExamFile','importExamNow','replaceExamQuestions','loadOnlinePaidAdmin','saveOnlineExamEditor','saveOnlinePaidExam','loadAdminOnlineExams','deleteOnlineExam','setOnlineExamPublished','saveOnlineExamCutoff'];
  function wrap(name){
   try{
    const original=window[name];
