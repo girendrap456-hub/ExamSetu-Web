@@ -1185,6 +1185,15 @@ async function loadOnlineExams(){
     }catch(e){console.warn('Rank load failed:',e.message)}
    }));
   }catch(e){console.warn('Submitted results status unavailable:',e.message)}
+  // Recover submitted status from the same authenticated RPC used by the exam screen.
+  // This also covers legacy results whose student_id is not the auth UUID.
+  await Promise.all((onlineExams||[]).map(async e=>{
+   if(onlineRanks[e.id]?.status==='submitted')return;
+   try{
+    const r=await onlineRpc('examsetu_first_result',{p_exam_id:Number(e.id)});
+    if(r?.submitted){onlineRanks[e.id]={...(onlineRanks[e.id]||{}),status:'submitted',score:r.score,rank:r.rank,participants:r.participants,result:{score:r.score,max_score:r.max_score,submitted_at:r.submitted_at}};}
+   }catch(err){console.warn('Submitted exam lookup:',e.id,err.message)}
+  }));
   // Read the student's real paused/active attempts even when optional rank RPC is unavailable.
   try{const {data:attemptRows,error:attemptErr}=await sb.from('exam_attempts').select('id,exam_id,status').eq('user_id',currentUser.id).in('status',['active','paused']).order('id',{ascending:false}).limit(200);if(attemptErr)throw attemptErr;for(const a of attemptRows||[]){if(!onlineRanks[a.exam_id]||onlineRanks[a.exam_id].status!=='submitted')onlineRanks[a.exam_id]={...(onlineRanks[a.exam_id]||{}),status:a.status,attempt_id:a.id};}}catch(e){console.warn('Attempt status unavailable:',e.message)}
   try{const totals=await onlineRpc('examsetu_exam_participants',{});for(const r of totals||[])onlineRanks[r.exam_id]={...(onlineRanks[r.exam_id]||{}),participants:r.participants};}catch(e){}
@@ -1214,19 +1223,28 @@ async function showOnlineExamQuestions(id){
  try{
   if(await esLoadFinalResult(id)){go('online-result');return;}
  }catch(e){alert('Result verification failed: '+e.message+'\nSupabase Final SQL पहले चलाएँ।');return;}
- if(item.is_paid){alert('Paid Exam के लिए Payment Verification उपलब्ध नहीं है।');return;}
+ if(item.is_paid&&!admin){
+  try{
+   const {data:hasAccess,error:accessError}=await sb.rpc('examsetu_my_paid_access');
+   if(accessError)throw accessError;
+   if(hasAccess!==true){alert('🔒 Paid Exam: Admin से Access प्राप्त करें।');return;}
+  }catch(e){alert('Paid Access जाँच विफल: '+e.message);return;}
+ }
  onlineExamQuestions=[];onlineQuestionState='loading';go('online-questions');
  try{
-  const {data,error}=await sb.from('exam_questions').select('id,question_no,text,options,text_en,options_en,solution_hi,solution_en').eq('exam_id',item.id).order('question_no',{ascending:true}).limit(300);
+  // Start/resume authorization must happen before the secure question RPC.
+  const authorization=await onlineRpc('examsetu_start_attempt',{p_exam_id:Number(item.id)});
+  if(authorization?.status==='submitted'){await esLoadFinalResult(item.id);go('online-result');return;}
+  const {data,error}=await sb.rpc('examsetu_get_exam_questions',{p_exam_id:Number(item.id)});
   if(error)throw error;
-  onlineExamQuestions=(data||[]).map(q=>({id:q.id,question_text:q.text,question_text_en:q.text_en,options:q.options,options_en:q.options_en,solution:q.solution_hi,solution_en:q.solution_en,question_order:q.question_no,marks:Number(item.marks)||3}));
+  onlineExamQuestions=(data||[]).map(q=>({id:q.id,question_text:q.text,question_text_en:q.text_en,options:q.options,options_en:q.options_en,solution:'',solution_en:'',question_order:q.question_no,marks:Number(item.marks)||3}));
   if(!onlineExamQuestions.length)throw Error('इस Exam के प्रश्न उपलब्ध नहीं हैं।');
   onlineQuestionState='ready';
   const {data:attempts,error:attemptError}=await sb.from('exam_attempts').select('id,exam_id,status,answers,remaining_seconds,started_at,updated_at').eq('exam_id',item.id).eq('user_id',currentUser.id).in('status',['active','paused']).order('id',{ascending:false}).limit(1);
   if(attemptError)throw attemptError;
   if(attempts?.length){
    const a=attempts[0];onlineRestore({status:a.status,remaining_seconds:a.remaining_seconds,attempt:a});
-   if(a.status==='active'){go('online-attempt');return;}
+   if(a.status==='active'){await onlineStartAttempt();return;}
    if(a.status==='paused'){await onlineStartAttempt();return;}
   }
  }catch(e){onlineQuestionState='error: '+e.message;onlineAttempt=null;onlinePaused=false;console.error('Exam load failed:',e);alert('Exam Safety Check: '+e.message);}
@@ -1343,6 +1361,8 @@ function onlineRestore(st){
  onlineOMR=window.matchMedia("(min-width:901px)").matches;onlineRunClock();
 }
 async function onlineStartAttempt(){
+ if(onlineSelectedExam?.is_paid&&!admin){try{const {data,error}=await sb.rpc('examsetu_my_paid_access');if(error)throw error;if(data!==true){alert('🔒 Paid Exam: Admin से Access प्राप्त करें।');return;}}catch(e){alert('Access check error: '+e.message);return;}}
+
  // Server-side locking is also required; never trust a cached card status.
  if(onlineSelectedExam && onlineRanks[onlineSelectedExam.id]?.status==='submitted'){
   alert('यह Exam पहले Submit हो चुका है। Solution या Analysis देखें।');return;
@@ -1697,7 +1717,18 @@ function renderSeriesDetail(){
  }).join(''):'<div class="card">इस Filter में कोई Test नहीं है।</div>'}</div></div>`;
 }
 function examCard(title,imported=false){const item=importedExams.find(x=>x.title===title&&x.published),r=history.find(x=>x.exam===title),total=item?item.questions.reduce((n,q)=>n+(Number(q.marks)||3),0):9,cutoff=cutoffFor(title),tone=r?(r.score>=cutoff?'pass':'fail'):'';const count=item?item.questions.length:3;return `<article class="series-card ${tone}"><div class="series-top"><span class="series-emblem" aria-hidden="true">🏆</span><span class="series-tag">⚡ ${count} Questions</span></div><div class="series-body"><h3>${esc(title)} ${item?(item.is_paid?`🔒 Paid ₹${Number(item.price||0)}`:`🟢 Free`):""}</h3><div class="series-meta">${imported?'Admin Published Exam':''} ${count} Questions</div><div class="series-result">${r?(r.score>=cutoff?'✓ Qualified':'✗ Below Cutoff')+' · '+r.score+'/'+total:'Not Attempted'} · Cutoff ${cutoff}</div><div class="series-progress-label"><span>${r?'1':'0'}/1 Completed</span><span>${r?'100':'0'}%</span></div><div class="series-progress"><i style="width:${r?'100':'0'}%"></i></div><button class="series-action" onclick="openLibraryExam(${JSON.stringify(title).replaceAll('"','&quot;')},${!!r})">${r?'🔁 Practice':'▶ Start Exam'}</button></div></article>`}
-function openLibraryExam(title,practice=false){exam=title;const item=importedExams.find(x=>x.title===title&&x.published);if(item?.is_paid){alert('🔒 Paid Exam ₹'+Number(item.price||0)+' — Payment Verification अभी उपलब्ध नहीं है।');return;}if(item){data=item.questions.map(q=>({subject:q.subject||'General',q:{hi:q.text,en:q.text_en||q.en||q.text},opts:{hi:q.options,en:Array.isArray(q.options_en)?q.options_en:q.options},a:q.answer??q.correct,sol:{hi:q.solution||'Solution not provided',en:q.solution_en||q.solution||'Solution not provided'},marks:Number(q.marks??item.marks_per_question??3)}));activeExamMinutes=Number(item.minutes)||70;activeNegativeMark=Number(item.negative_mark)||0}else{data=demoData.map(q=>({...q,marks:3}));activeExamMinutes=70;activeNegativeMark=1}start(practice)}
+
+async function esOpenPaidPracticeFromLibrary(examId){
+ const item=onlineExams.find(e=>String(e.id)===String(examId));
+ if(!item)return alert('Exam नहीं मिला।');
+ if(item.is_paid&&!admin){
+  try{const {data,error}=await sb.rpc('examsetu_my_paid_access');if(error)throw error;if(data!==true)return alert('🔒 Paid Practice के लिए Admin Access जरूरी है।');}
+  catch(e){return alert('Paid Access जाँच विफल: '+e.message);}
+ }
+ // Paid practice needs a server-side practice RPC before question/answer content can be shown.
+ alert('Paid Practice के लिए सुरक्षित Question और Solution RPC अभी तैयार करना बाकी है।');
+}
+function openLibraryExam(title,practice=false){exam=title;const item=importedExams.find(x=>x.title===title&&x.published);if(item?.is_paid){const live=onlineExams.find(e=>String(e.id)===String(item.id)||e.title===item.title);if(live){if(practice){esOpenPaidPracticeFromLibrary(live.id);return;}showOnlineExamQuestions(live.id);return;}alert('Paid Exam अभी Online Exams सूची में उपलब्ध नहीं है।');return;}if(item){data=item.questions.map(q=>({subject:q.subject||'General',q:{hi:q.text,en:q.text_en||q.en||q.text},opts:{hi:q.options,en:Array.isArray(q.options_en)?q.options_en:q.options},a:q.answer??q.correct,sol:{hi:q.solution||'Solution not provided',en:q.solution_en||q.solution||'Solution not provided'},marks:Number(q.marks??item.marks_per_question??3)}));activeExamMinutes=Number(item.minutes)||70;activeNegativeMark=Number(item.negative_mark)||0}else{data=demoData.map(q=>({...q,marks:3}));activeExamMinutes=70;activeNegativeMark=1}start(practice)}
 
 function progress(r){let v=Math.max(0,Math.min(100,Math.round(r.score/9*100)));return `<div class="flex tiny" style="margin:10px 0"><span>${esc(r.date)}</span><div class="bar"><i style="width:${v}%"></i></div><b>${r.score}/${r.totalMarks||9}</b></div>`}
 function resultCards(r){return `<h2>Score Progress — ${esc(r.exam)}</h2><div class="card">${history.filter(x=>x.exam===r.exam).slice().reverse().map(progress).join('')}</div>`}
@@ -1778,7 +1809,19 @@ async function esFetchRealLeaderboard(){
 }
 function esAnalysisHtml(r){const total=Number(r.total_questions)||0,attempted=Number(r.attempted)||0,correct=Number(r.correct)||0,wrong=Math.max(0,attempted-correct);return `<div class="es-result-stats"><div class="es-mini">Total Questions<strong>${total}</strong></div><div class="es-mini">Attempted<strong>${attempted}</strong></div><div class="es-mini es-pass">Correct<strong>${correct}</strong></div><div class="es-mini es-fail">Incorrect<strong>${wrong}</strong></div><div class="es-mini">Unattempted<strong>${Math.max(0,total-attempted)}</strong></div></div>`}
 let esPracticeAnswers={};let esReattemptEnabled=true;let esPracticeIndex=0;let esPracticeLang='hi';let esSolutionOmrOpen=true;let esSolutionOmrScroll=0;
-function esOpenPractice(){esPracticeAnswers={};esPracticeIndex=0;esPracticeLang='hi';esSolutionOmrOpen=true;esSolutionOmrScroll=0;go('online-solution');esLoadReviewTranslations()}
+async function esOpenPractice(){
+ const examId=Number(onlineAttemptResult?.exam_id||onlineSelectedExam?.id);
+ const examItem=onlineExams.find(x=>Number(x.id)===examId)||onlineSelectedExam;
+ if(!currentUser){alert('Practice के लिए Login करें।');return;}
+ if(examItem?.is_paid){
+  try{
+   const {data:allowed,error}=await sb.rpc('examsetu_my_paid_access');
+   if(error)throw error;
+   if(allowed!==true){alert('🔒 Paid Practice के लिए Admin से Active Access लेना जरूरी है।');return;}
+  }catch(e){alert('Paid Practice Access Check: '+e.message);return;}
+ }
+ esPracticeAnswers={};esPracticeIndex=0;esPracticeLang='hi';esSolutionOmrOpen=true;esSolutionOmrScroll=0;go('online-solution');esLoadReviewTranslations();
+}
 let esReviewTranslationLoading=false;
 async function esLoadReviewTranslations(){
  if(esReviewTranslationLoading||!sb||!onlineAttemptResult)return;
@@ -1902,25 +1945,34 @@ async function esRefreshLiveStats(){
  if(!target||!admin||!sb)return;
  const request=++esLiveStatsLastRequest;
  try{
-  const [statsResponse,onlineResponse]=await Promise.all([
-   sb.rpc('examsetu_admin_live_stats'),sb.rpc('examsetu_admin_online_users')
+  const [statsResponse,onlineResponse,studentCountsResponse]=await Promise.all([
+   sb.rpc('examsetu_admin_live_stats'),sb.rpc('examsetu_admin_online_users'),sb.rpc('examsetu_admin_registered_students')
   ]);
   if(statsResponse.error)throw statsResponse.error;
   if(onlineResponse.error)throw onlineResponse.error;
+  if(studentCountsResponse.error)throw studentCountsResponse.error;
   if(request!==esLiveStatsLastRequest||!admin||!['admin','students','analytics'].includes(page))return;
   const el=document.getElementById('es-live-stats');if(!el)return;
   const d=statsResponse.data||{};
-  const count=v=>Number.isFinite(Number(v))?String(Number(v)):'—';
+  const registry=studentCountsResponse.data||{};
+  const sc=registry.counts||{};
+  const registeredRows=Array.isArray(registry.students)?registry.students:[];
+  let paidAccessByUser={};try{const {data,error}=await sb.rpc('examsetu_admin_paid_access_list');if(error)throw error;for(const r of data||[])paidAccessByUser[String(r.user_id)]=!!r.is_active;}catch(e){console.warn(e);paidAccessByUser=null;}
+   const count=v=>Number.isFinite(Number(v))?String(Number(v)):'—';
   const rows=Array.isArray(d.student_rows)?d.student_rows:[];
   el.innerHTML=`<div class="grid">
-   <div class="stat"><b>${count(d.students)}</b>Total Students</div>
+   <div class="stat"><b>${count(sc.registered_students)}</b>Total Registered Students</div>
+   <div class="stat"><b>${count(sc.students_with_results)}</b>Students with Results</div>
+   <div class="stat"><b>${count(sc.students_without_results)}</b>Students without Results</div>
+   <div class="stat"><b>${count(sc.admin_accounts)}</b>Admin Accounts</div>
    <div class="stat"><b>${count(d.exams)}</b>Total Exams</div>
    <div class="stat"><b>${count(d.attempts)}</b>Submitted Attempts</div>
    <div class="stat"><b>${count(onlineResponse.data)}</b>Active Users (2 min)</div>
-  </div><h2>Student Attempts</h2><div class="card" style="overflow-x:auto"><table style="width:100%;text-align:left"><thead><tr><th>Student</th><th>Attempts</th><th>Best Score</th></tr></thead><tbody>${rows.map(r=>`<tr><td><button type="button" class="es-student-link" data-name="${esc(String(r.name||'Student'))}" onclick="esOpenStudentAnalysis(this.dataset.name)">${esc(String(r.name||'Student'))} → View Analysis</button></td><td>${count(r.attempts)}</td><td>${r.best_score==null?'—':count(r.best_score)}</td></tr>`).join('')||'<tr><td colspan="3">No verified records</td></tr>'}</tbody></table></div><p class="tiny muted">Online = पिछले 2 मिनट में Heartbeat; Submitted Attempts results table पर आधारित हैं।</p>`;
+  </div><h2>Student Attempts</h2><div class="card" style="overflow-x:auto"><table style="width:100%;text-align:left"><thead><tr><th>Student</th><th>Attempts</th><th>Best Score</th></tr></thead><tbody>${rows.map(r=>`<tr><td><button type="button" class="es-student-link" data-name="${esc(String(r.name||'Student'))}" onclick="esOpenStudentAnalysis(this.dataset.name)">${esc(String(r.name||'Student'))} → View Analysis</button></td><td>${count(r.attempts)}</td><td>${r.best_score==null?'—':count(r.best_score)}</td></tr>`).join('')||'<tr><td colspan="3">No verified records</td></tr>'}</tbody></table></div><h2>All Registered Students</h2><div class="card" style="overflow-x:auto"><table style="width:100%;text-align:left;border-collapse:collapse"><thead><tr><th>Name</th><th>Email</th><th>Exam Status</th><th>Registered</th><th>Paid Access</th></tr></thead><tbody>${registeredRows.map(r=>{const uid=String(r.user_id||r.id||'');const active=paidAccessByUser?.[uid]===true;return `<tr><td>${esc(String(r.name||'Name not provided'))}</td><td>${esc(String(r.email||'—'))}</td><td>${r.has_result?'Exam Submitted':'No Exam Yet'}</td><td>${r.created_at?esDate(r.created_at):'—'}</td><td>${paidAccessByUser===null?'Unavailable':!uid?'Missing User ID':`<span class="chip">${active?'Active':'Inactive'}</span> <button type="button" class="btn" style="padding:7px" data-user-id="${esc(uid)}" data-student-name="${esc(String(r.name||r.email||'Student'))}" onclick="esToggleStudentPaidAccess(this)">${active?'Revoke Access':'Grant Access'}</button>`}</td></tr>`}).join('')||'<tr><td colspan="5">No registered students found</td></tr>'}</tbody></table></div><p class="tiny muted">Online = पिछले 2 मिनट में Heartbeat; Submitted Attempts results table पर आधारित हैं।</p>`;
  }catch(e){const el=document.getElementById('es-live-stats');if(el&&request===esLiveStatsLastRequest)el.textContent='Live Statistics Error: '+(e.message||String(e));}
 }
 
+async function esToggleStudentPaidAccess(btn){if(!admin||!sb)return;const uid=btn.dataset.userId;const grant=btn.textContent.trim()==='Grant Access';if(!/^[0-9a-f-]{36}$/i.test(uid))return alert('Student ID missing');if(!confirm((btn.dataset.studentName||'Student')+' : '+(grant?'Grant':'Revoke')+' all paid exams access?'))return;btn.disabled=true;try{const {error}=await sb.rpc('examsetu_admin_set_paid_access',{p_user_id:uid,p_is_active:grant});if(error)throw error;await esRefreshLiveStats();alert('Access '+(grant?'granted':'revoked'));}catch(e){alert('Access error: '+e.message);btn.disabled=false;}}
 /* Admin-only complete student analysis; never use demonstration scores. */
 
 let esScoreRows=[],esScoreSelected=null,esScoreSearch='',esScoreExam=null,esScorePendingName='';
@@ -1936,6 +1988,9 @@ async function esLoadAdminScoreReport(){
   esScoreRows=Array.isArray(data)?data:[];
   if(esScorePendingName){const found=esScoreRows.find(r=>String(r.student_name||'').trim().toLowerCase()===esScorePendingName.trim().toLowerCase());if(found)esScoreSelected=String(found.student_id);else esScoreSearch=esScorePendingName;esScorePendingName='';}
   esDrawAdminScoreReport();
+  const uniqueStudents=new Set(esScoreRows.map(r=>String(r.student_id||'')).filter(Boolean));
+  const statsHost=document.getElementById('es-live-stats');
+  if(statsHost){const stats=statsHost.querySelector('.stat b');if(stats){stats.textContent=String(uniqueStudents.size);const label=stats.parentElement;label.lastChild.textContent='Students with Results';}}
  }catch(err){const el=document.getElementById('es-admin-score-report');if(el)el.innerHTML='<p class="danger"><b>Analysis load नहीं हुआ:</b> '+esc(err.message||String(err))+'</p><p class="muted">नई Admin Analysis SQL चलाएँ, उसी Admin ID से Login करें और Refresh दबाएँ।</p><button class="btn alt" onclick="esLoadAdminScoreReport()">Retry</button>';}
 }
 function esCountAnswers(details){
