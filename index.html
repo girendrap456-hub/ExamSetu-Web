@@ -3224,10 +3224,7 @@ html:is(.es-android-app,.es-mobile-web) body.dark .es-solution-review>.card,html
  if(!isApp)return;
  document.addEventListener('DOMContentLoaded',()=>{
   // Native WebView splash overlay disabled; render the app immediately.
-  const obs=new MutationObserver(()=>{
-   const active=document.querySelector('.es-premium-number-list .es-sol-current');
-   if(active)window.__esPremiumLastActive=active;
-  });obs.observe(document.body,{childList:true,subtree:true});
+  document.addEventListener('click',event=>{const active=event.target.closest('.es-premium-number-list .es-sol-current');if(active)window.__esPremiumLastActive=active;},{passive:true});
  });
 })();
 </script>
@@ -3328,7 +3325,7 @@ function update(){
  if(bar.dataset.rendered!==html){bar.innerHTML=html;bar.dataset.rendered=html;}
 }
  document.addEventListener('click',e=>{const b=e.target.closest('#es-bottom-tabs button[data-target]');if(!b)return;const target=b.dataset.target;if(target==='my-results'){if(typeof esRefreshMyResults==='function')esRefreshMyResults();return;}if(typeof go==='function')go(target);});
- document.addEventListener('DOMContentLoaded',()=>{update();const main=document.getElementById('main');if(main){new MutationObserver(()=>queueMicrotask(update)).observe(main,{childList:true});}});
+ document.addEventListener('DOMContentLoaded',()=>{update();const main=document.getElementById('main');if(main){new MutationObserver(()=>{if(window.__esBottomTabsPending)return;window.__esBottomTabsPending=true;requestAnimationFrame(()=>{window.__esBottomTabsPending=false;update()})}).observe(main,{childList:true});}});
 })();
 </script>
 <script id="es-v15-compact-exam-js">
@@ -3366,7 +3363,7 @@ function update(){
    if(originalSelect)bar.querySelector('#es-v15-select').value=originalSelect.value;
   }finally{busy=false;}
  }
- const observer=new MutationObserver(()=>{if(!busy)requestAnimationFrame(update)});
+ const observer=new MutationObserver(()=>{if(busy||window.__esV15FramePending)return;window.__esV15FramePending=true;requestAnimationFrame(()=>{window.__esV15FramePending=false;update()})});
  observer.observe(document.body,{subtree:true,childList:true});
  setInterval(()=>{const src=document.querySelector('#online-clock, #exam-top-clock');const dst=document.querySelector('.es-v15-time');if(src&&dst)dst.textContent=src.textContent;},1000);
  document.addEventListener('DOMContentLoaded',update);
@@ -3501,7 +3498,7 @@ body.dark #es-alert-dialog{background:#1b2b42;color:#f2f6ff}body.dark #es-alert-
   }
  }
  let pending=false;
- const obs=new MutationObserver(()=>{if(pending)return;pending=true;queueMicrotask(()=>{pending=false;enhance()})});
+ const obs=new MutationObserver(()=>{if(pending)return;pending=true;setTimeout(()=>{pending=false;enhance()},120)});
  obs.observe(document.body,{childList:true,subtree:true});
  enhance();
  // Official online exam: only server RPC fulfillment confirms save.
@@ -3624,7 +3621,7 @@ body:is(.dark,.dark-mode) :is(.es-premium-tile,.es-premium-banner){border-radius
   if(anchor && !anchor.contains(target))anchor.insertAdjacentElement('afterend',target);
   else {const home=document.querySelector('main');if(home && !home.contains(target))home.appendChild(target);}
  }
- const obs=new MutationObserver(()=>{if(window.__esAdjustPending)return;window.__esAdjustPending=true;queueMicrotask(()=>{window.__esAdjustPending=false;adjust()})});
+ const obs=new MutationObserver(()=>{if(window.__esAdjustPending)return;window.__esAdjustPending=true;setTimeout(()=>{window.__esAdjustPending=false;adjust()},120)});
  window.addEventListener('DOMContentLoaded',()=>{obs.observe(document.body,{childList:true,subtree:true});adjust()});
 })();
 </script>
