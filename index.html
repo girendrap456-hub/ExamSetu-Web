@@ -2835,7 +2835,7 @@ else if(page==='admin-notes'){h=admin?esAdminNotesHtml():'<p>Admin login require
 else if(page==='rank'){h=esRealLeaderboardHtml();setTimeout(esFetchRealLeaderboard,0)}
 else if(page==='profile'){h=`<h1>My Profile</h1><div class="card es-profile-card"><button type="button" class="es-profile-logout" onclick="logoutDemo()" title="Logout" aria-label="Logout"><svg viewBox="0 0 64 64" width="31" height="31" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M27 10H13a5 5 0 0 0-5 5v34a5 5 0 0 0 5 5h14"/><path d="M23 32h32M44 21l11 11-11 11"/><path d="M28 10h13a5 5 0 0 1 5 5v9"/></svg></button><div class="profile-avatar-display">${esAvatarHtml(studentAvatar())}</div><b>${esc(demoAccount?.name||esStudentName()||"Student")}</b><p>ExamSetu Learner • ${esc(demoAccount?.email||"")}</p><div class="student-avatar-grid">${STUDENT_AVATARS.map(a=>`<button type="button" class="student-avatar-option ${studentAvatar()===a?'chosen':''}" onclick="chooseStudentAvatar('${a}')" aria-label="Choose profile picture" title="Select Photo">${esAvatarHtml(a)}</button>`).join('')}</div><div class="flex es-profile-actions"><button type="button" class="btn alt es-photo-upload" onclick="document.getElementById('es-profile-gallery-picker').click()">📷 Gallery से फोटो</button><input id="es-profile-gallery-picker" type="file" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="esUploadProfilePhoto(this)" aria-label="Gallery से फोटो चुनें"></div></div><button class="btn" onclick="go('history')">📜 My Test History</button>`+['Bookmarked Questions','Wrong Question Practice','Study Goals','Premium Membership','Notifications'].map(x=>`<div class="card">${x} <span class="chip">Planned</span></div>`).join('')}
 else if(page==='admin-login'){h=`<h1>🔐 Admin Access</h1><div class="card"><p>Admin Panel खोलने के लिए पहले अपनी Admin ID से Student Login करें। फिर Logo पर 5 बार Tap करके यहाँ आएँ।</p><button class="btn" onclick="openAdminOnline()">Open Admin Panel →</button><p class="tiny muted">Admin Access केवल Supabase में admin Role वाली Login ID को मिलेगा।</p></div>`}
-else if(page==='admin'){h=`<div class="card"><h2>🗂 Smart Folder & Exam Ordering</h2><button class="btn" onclick="es6Tab='folders';go('es6-features')">Open Smart Manager →</button></div><h1>Admin Dashboard</h1>${esLiveStatsMarkup()}<div class="card"><button class="btn" onclick="go('students')">👥 View All Student Exam Analysis →</button></div><div class="hero"><h2>Add New Exam</h2><button class="btn" onclick="go('add')">Open Exam Settings →</button></div>`}
+else if(page==='admin'){h=`<div class="card" id="es-smart-manager-slot"><h2>🧠 Smart Study Manager</h2><p>मौजूदा ExamSetu प्रश्न बैंक से Smart Study के लिए प्रश्न उपलब्ध कराएँ।</p><button class="btn" onclick="esSmartManagerOpen()">⚙️ Smart Study Manager खोलें →</button></div><div class="card"><h2>🗂 Smart Folder & Exam Ordering</h2><button class="btn" onclick="es6Tab='folders';go('es6-features')">Open Smart Manager →</button></div><h1>Admin Dashboard</h1>${esLiveStatsMarkup()}<div class="card"><button class="btn" onclick="go('students')">👥 View All Student Exam Analysis →</button></div><div class="hero"><h2>Add New Exam</h2><button class="btn" onclick="go('add')">Open Exam Settings →</button></div>`}
 else if(page==='add'){h=`<h1>➕ Add / Edit Exam</h1>${importManager()}`}
 else if(page==='import'){h=`<h1>📥 JSON Exam Import</h1>${importManager()}`}
 else if(['students','analytics'].includes(page)){h=`<h1>${page==='students'?'👥 Student Management':'📈 Admin Analytics'}</h1>${esLiveStatsMarkup()}${page==='students'?'<section class="card es-score-report"><h2>Student Exam Analysis</h2><p class="muted">सभी Students के वास्तविक Exam Scores, First Attempts और Detailed Analysis</p><div id="es-admin-score-report">Loading student scores…</div></section>':''}`}
@@ -4184,4 +4184,55 @@ document.addEventListener('fullscreenchange',update);
 setInterval(update,1200);
 update();
 })();
-</script></body></html>
+</script>
+<style id="es-smart-manager-style">
+#es-smart-manager{position:fixed;inset:0;background:#09162abf;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:12px}
+#es-smart-manager .esm-box{width:min(94vw,800px);max-height:90dvh;overflow:auto;background:#fff;color:#17234c;border-radius:20px;padding:22px;box-shadow:0 20px 70px #0006}
+#es-smart-manager .esm-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid #e7e9f5}
+#es-smart-manager button{border:0;background:#5f4bd3;color:white;padding:10px 15px;border-radius:10px;font-weight:700;cursor:pointer}
+#es-smart-manager input[type=checkbox]{width:21px;height:21px;accent-color:#5f4bd3}
+#es-smart-manager .esm-muted{color:#69728a;font-size:13px}
+#es-smart-manager .esm-list{max-height:220px;overflow:auto}
+body.dark #es-smart-manager .esm-box{background:#132440;color:#f4f6ff}
+body.dark #es-smart-manager .esm-row{border-color:#344765}
+body.dark #es-smart-manager .esm-muted{color:#c1c9db}
+</style>
+<script id="es-smart-manager-script">
+(function(){'use strict';
+const fields=[['auto_question_bank','📚 Published Exams से Question Bank'],['daily_challenge','📅 Daily Challenge'],['custom_practice','📝 Custom Practice'],['wrong_question_practice','❌ Wrong Question Practice'],['bookmark_practice','🔖 Bookmark Practice']];
+const escapeHTML=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+window.esSmartManagerOpen=async function(){
+ document.getElementById('es-smart-manager')?.remove();
+ const modal=document.createElement('div');modal.id='es-smart-manager';
+ modal.innerHTML='<div class="esm-box"><div class="esm-row"><h2>🧠 Smart Study Manager</h2><button id="esm-close" type="button">✕ बंद</button></div><p id="esm-status" class="esm-muted">Supabase से Settings लोड हो रही हैं…</p><p><button type="button" id="esm-open-practice">📝 मौजूदा Live Custom Practice खोलें →</button></p><div id="esm-controls"></div><div class="esm-row"><button id="esm-save" type="button">💾 Supabase में Save करें</button><button id="esm-reload" type="button">↻ Refresh</button></div><h3>📚 Published Exam Question Bank</h3><div id="esm-inventory" class="esm-muted">लोड हो रहा है…</div><p class="esm-muted">यहाँ Admin की Settings सभी विद्यार्थियों के लिए Supabase में Save होंगी। Practice और Daily Challenge का पूरा UI जोड़ना अलग चरण है।</p></div>';
+ document.body.appendChild(modal);modal.querySelector('#esm-close').onclick=()=>modal.remove();modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
+ const status=msg=>{modal.querySelector('#esm-status').textContent=msg};
+ const client=typeof sb!=='undefined'?sb:null;
+ if(!client){status('Supabase उपलब्ध नहीं है। Login और Internet जाँचें।');return}
+ async function load(){
+  status('Supabase से Settings पढ़ रहे हैं…');
+  const r=await client.from('examsetu_smart_settings').select('*').eq('id',1).maybeSingle();
+  if(r.error){status('Settings नहीं खुलीं: '+r.error.message);return}
+  const cfg=r.data||{};
+  modal.querySelector('#esm-controls').innerHTML=fields.map(([key,label])=>'<label class="esm-row"><b>'+label+'</b><input type="checkbox" data-field="'+key+'" '+(cfg[key]?'checked':'')+'></label>').join('');
+  status('✓ Settings Supabase से लोड हो गई हैं। बदलाव के बाद Save करें।');
+ }
+ modal.querySelector('#esm-save').onclick=async()=>{
+  const payload={id:1,updated_at:new Date().toISOString()};
+  modal.querySelectorAll('[data-field]').forEach(el=>payload[el.dataset.field]=el.checked);
+  status('Save हो रहा है…');const r=await client.from('examsetu_smart_settings').upsert(payload,{onConflict:'id'}).select('id').single();
+  status(r.error?'Save नहीं हुआ: '+r.error.message:'✓ Settings Supabase में Save हो गई हैं।');
+ };
+ modal.querySelector('#esm-reload').onclick=()=>{load();inventory()};
+ modal.querySelector('#esm-open-practice').onclick=()=>{modal.remove();if(typeof go==='function'){go('es6-features');if(typeof es6Tab!=='undefined'){es6Tab='practice';if(typeof es6Load==='function')es6Load()}}};
+ async function inventory(){
+  const out=modal.querySelector('#esm-inventory');
+  const [ex,qs]=await Promise.all([client.from('exams').select('id,title').eq('published',true).order('id',{ascending:false}).limit(50),client.from('exam_questions').select('id',{count:'exact',head:true}).not('subject','is',null)]);
+  if(ex.error){out.textContent='Exams नहीं खुले: '+ex.error.message;return}
+  out.innerHTML='<p>विषय वाले प्रश्न: <b>'+(qs.error?'गिनती उपलब्ध नहीं':qs.count)+'</b> · नीचे पहले '+(ex.data||[]).length+' प्रकाशित Exams</p><div class="esm-list">'+(ex.data||[]).map(e=>'<div class="esm-row"><span>'+escapeHTML(e.title)+'</span><small>#'+Number(e.id)+'</small></div>').join('')+'</div>';
+ }
+ await Promise.all([load(),inventory()]);
+};
+})();
+</script>
+</body></html>
