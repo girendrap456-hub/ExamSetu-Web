@@ -1849,7 +1849,7 @@ function onlineProgressPayload(){
  const payload={_index:a.index,_visited:a.visited,_review:a.review};
  for(const [index,value] of Object.entries(a.answers)){
   const q=onlineExamQuestions[Number(index)];
-  if(q && Number.isInteger(Number(value)) && Number(value)>=0 && Number(value)<=3) payload[String(q.id)]=Number(value);
+  if(q && Number.isInteger(Number(value)) && Number(value)>=0 && Number(value)<(Array.isArray(q.options)?q.options.length:Object.values(q.options||{}).length)) payload[String(q.id)]=Number(value);
  }
  return payload;
 }
@@ -1914,7 +1914,7 @@ async function onlineSubmit(automatic=false){
   const answers={};
   for(const [index,value] of Object.entries(a.answers)){
    const q=onlineExamQuestions[Number(index)];
-   if(q&&Number.isInteger(Number(value))&&Number(value)>=0&&Number(value)<=3)answers[String(q.id)]=Number(value);
+   if(q&&Number.isInteger(Number(value))&&Number(value)>=0&&Number(value)<(Array.isArray(q.options)?q.options.length:Object.values(q.options||{}).length))answers[String(q.id)]=Number(value);
   }
   if(Object.keys(answers).length!==Object.keys(a.answers).length)throw Error('Answers count mismatch; Submit रोका गया।');
   const st=await onlineRpc('examsetu_submit_attempt',{p_attempt_id:Number(a.id),p_answers:answers});
