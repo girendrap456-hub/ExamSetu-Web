@@ -3378,10 +3378,10 @@ if(typeof baseValidate==='function')window.validateExamJSON=function(raw){
   const opts=q.options;
   if(!Array.isArray(opts)||![4,5].includes(opts.length)||opts.some(v=>typeof v!=='string'||!v.trim()))issues.push(`Q${i+1}: 4 या 5 गैर-खाली विकल्प आवश्यक हैं`);
   const answer=q.correct??q.answer??q.correct_index;
-  if(!Number.isInteger(Number(answer))||Number(answer)<0||Number(answer)>3)issues.push(`Q${i+1}: Answer 0 से 4 होना चाहिए`);
+  if(!Number.isInteger(Number(answer))||Number(answer)<0||Number(answer)>=opts.length)issues.push(`Q${i+1}: Answer विकल्पों की सीमा में होना चाहिए`);
   const marks=q.marks??result.marks_per_question;
   if(!Number.isFinite(Number(marks))||Number(marks)<=0)issues.push(`Q${i+1}: Marks सकारात्मक होने चाहिए`);
-  if(!String(q.solution??q.explanation??'').trim())issues.push(`Q${i+1}: Detailed Solution गायब है`);
+  if(!String(q.solution_hi??q.detailed_solution_hi??q.solution??q.explanation??'').trim())issues.push(`Q${i+1}: Detailed Solution गायब है`);
   if(Array.isArray(q.options_en)&&q.options_en.length>0&&(q.options_en.length!==opts.length||q.options_en.some(x=>!String(x).trim())))issues.push(`Q${i+1}: English options अधूरे हैं`);
  });
  if(issues.length)throw Error('JSON Validation Failed ('+issues.length+' समस्याएँ):\n'+issues.slice(0,12).join('\n')+(issues.length>12?'\n...और '+(issues.length-12)+' समस्याएँ':''));
